@@ -4,7 +4,7 @@ Ucab is a simple, reliable, and premium cab hailing application that makes trave
 
 For example, when **Sarah** needed to reach the airport urgently, she used Ucab to book a nearby cab, tracked the driver's approach, and arrived exactly on time.
 
----
+
 
 ## 🏗️ Project Architecture
 
