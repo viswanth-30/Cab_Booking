@@ -49,7 +49,7 @@ console.log(`[Startup] Frontend build directory exists: ${fs.existsSync(distPath
 
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  app.get('(.*)', (req, res) => {
+  app.get('*all', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
