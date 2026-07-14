@@ -238,7 +238,7 @@ export default function UserDashboard() {
         alert(`Failed to retrieve live location: ${error.message}`);
         setLocating(false);
       },
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
@@ -331,15 +331,53 @@ export default function UserDashboard() {
   };
 
   const fetchEstimates = async () => {
-    if (!pickupLoc || !dropoffLoc) return;
+    let currentPickup = pickupLoc;
+    let currentDropoff = dropoffLoc;
     setLoadingEstimate(true);
+
     try {
+      // Auto-resolve pickup if not set but text query is typed
+      if (!currentPickup && pickupQuery.trim() !== '') {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(pickupQuery)}&format=json&countrycodes=in&limit=1`);
+        const data = await res.json();
+        if (data.length > 0) {
+          currentPickup = {
+            name: data[0].display_name,
+            lat: parseFloat(data[0].lat),
+            lng: parseFloat(data[0].lon)
+          };
+          setPickupLoc(currentPickup);
+          setPickupQuery(data[0].display_name);
+        }
+      }
+
+      // Auto-resolve dropoff if not set but text query is typed
+      if (!currentDropoff && dropoffQuery.trim() !== '') {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(dropoffQuery)}&format=json&countrycodes=in&limit=1`);
+        const data = await res.json();
+        if (data.length > 0) {
+          currentDropoff = {
+            name: data[0].display_name,
+            lat: parseFloat(data[0].lat),
+            lng: parseFloat(data[0].lon)
+          };
+          setDropoffLoc(currentDropoff);
+          setDropoffQuery(data[0].display_name);
+        }
+      }
+
+      if (!currentPickup || !currentDropoff) {
+        alert('Please enter valid pickup and dropoff locations.');
+        setLoadingEstimate(false);
+        return;
+      }
+
       const res = await axios.get(`${API_URL}/rides/estimate`, {
         params: {
-          pickupLat: pickupLoc.lat,
-          pickupLng: pickupLoc.lng,
-          dropoffLat: dropoffLoc.lat,
-          dropoffLng: dropoffLoc.lng
+          pickupLat: currentPickup.lat,
+          pickupLng: currentPickup.lng,
+          dropoffLat: currentDropoff.lat,
+          dropoffLng: currentDropoff.lng
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -349,6 +387,7 @@ export default function UserDashboard() {
       }
     } catch (err) {
       console.error(err);
+      alert('Failed to calculate fares. Please check your addresses and connection.');
     } finally {
       setLoadingEstimate(false);
     }
@@ -957,7 +996,7 @@ export default function UserDashboard() {
                   <div className="d-flex gap-2">
                     <button 
                       onClick={fetchEstimates} 
-                      disabled={!pickupLoc || !dropoffLoc || loadingEstimate}
+                      disabled={pickupQuery.trim() === '' || dropoffQuery.trim() === '' || loadingEstimate}
                       className="btn btn-outline-light w-100 py-2.5 rounded-pill mt-2"
                     >
                       {loadingEstimate ? (
