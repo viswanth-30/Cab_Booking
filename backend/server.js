@@ -41,10 +41,13 @@ app.use('/api/payments', paymentRoutes);
 
 // Base route
 const path = require('path');
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+const fs = require('fs');
+const distPath = path.join(__dirname, '../frontend/dist');
+
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
   app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../frontend', 'dist', 'index.html'));
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
   app.get('/', (req, res) => {

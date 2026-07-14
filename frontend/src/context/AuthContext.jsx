@@ -3,7 +3,9 @@ import axios from 'axios';
 import io from 'socket.io-client';
 
 const AuthContext = createContext();
-const API_URL = 'http://localhost:5000/api';
+const API_URL = window.location.hostname === 'localhost'
+  ? 'http://localhost:5000/api'
+  : '/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -43,7 +45,7 @@ export const AuthProvider = ({ children }) => {
   // Socket Connection Management
   useEffect(() => {
     if (user) {
-      const socketConn = io('http://localhost:5000');
+      const socketConn = io(window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin);
       
       socketConn.on('connect', () => {
         socketConn.emit('join', user._id);
