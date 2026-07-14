@@ -40,9 +40,17 @@ app.use('/api/rides', rideRoutes);
 app.use('/api/payments', paymentRoutes);
 
 // Base route
-app.get('/', (req, res) => {
-  res.send('Ucab API is running...');
-});
+const path = require('path');
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '../frontend', 'dist', 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.send('Ucab API is running...');
+  });
+}
 
 // Error handling
 app.use(errorHandler);

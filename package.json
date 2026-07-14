@@ -4,7 +4,7 @@
   "description": "Ucab - Root Hailing System Deployment Workspace",
   "main": "backend/server.js",
   "scripts": {
-    "install-backend": "npm install --prefix backend",
+    "build": "npm install --prefix frontend && npm run build --prefix frontend",
     "start": "node backend/server.js"
   },
   "dependencies": {
