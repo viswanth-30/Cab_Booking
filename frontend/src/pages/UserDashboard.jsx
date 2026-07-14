@@ -3,21 +3,18 @@ import { useAuth } from '../context/AuthContext';
 import MapContainer from '../components/MapContainer';
 import axios from 'axios';
 
-const LOCATIONS = [
-  { name: 'MG Road Metro Station', lat: 12.9756, lng: 77.6067 },
-  { name: 'Indiranagar 100 Feet Rd', lat: 12.9718, lng: 77.6411 },
-  { name: 'Koramangala 80 Feet Rd', lat: 12.9279, lng: 77.6271 },
-  { name: 'Whitefield ITPL', lat: 12.9698, lng: 77.7499 },
-  { name: 'Electronic City Phase 1', lat: 12.8452, lng: 77.6602 },
-  { name: 'Kempegowda Int Airport (Sarah\'s Destination)', lat: 13.1986, lng: 77.7066 }
-];
-
 export default function UserDashboard() {
   const { user, token, socket } = useAuth();
   
-  // Locations select state
-  const [pickupIdx, setPickupIdx] = useState('');
-  const [dropoffIdx, setDropoffIdx] = useState('');
+  // Locations search/live state
+  const [pickupQuery, setPickupQuery] = useState('');
+  const [dropoffQuery, setDropoffQuery] = useState('');
+  const [pickupSuggestions, setPickupSuggestions] = useState([]);
+  const [dropoffSuggestions, setDropoffSuggestions] = useState([]);
+  const [locating, setLocating] = useState(false);
+  const [searchingPickup, setSearchingPickup] = useState(false);
+  const [searchingDropoff, setSearchingDropoff] = useState(false);
+
   const [pickupLoc, setPickupLoc] = useState(null);
   const [dropoffLoc, setDropoffLoc] = useState(null);
   
@@ -68,8 +65,15 @@ export default function UserDashboard() {
     fetchActiveRide();
     fetchHistory();
     fetchSavedCards();
-    generateNearbyCabs();
+    generateNearbyCabs(null);
   }, []);
+
+  // Sync nearby cabs to follow pickup selection
+  useEffect(() => {
+    if (pickupLoc) {
+      generateNearbyCabs(pickupLoc);
+    }
+  }, [pickupLoc]);
 
   // Listen to live socket events for updates
   useEffect(() => {
@@ -145,7 +149,9 @@ export default function UserDashboard() {
       if (res.data.success && res.data.ride) {
         setActiveRide(res.data.ride);
         setPickupLoc(res.data.ride.pickupLocation);
+        setPickupQuery(res.data.ride.pickupLocation.name);
         setDropoffLoc(res.data.ride.dropoffLocation);
+        setDropoffQuery(res.data.ride.dropoffLocation.name);
         if (res.data.ride.driver && res.data.ride.driver.currentLocation) {
           setDriverLoc(res.data.ride.driver.currentLocation);
         }
@@ -185,58 +191,142 @@ export default function UserDashboard() {
   };
 
   // Generate randomized nearby cabs for map decorations
-  const generateNearbyCabs = () => {
-    const centerLat = 12.9716;
-    const centerLng = 77.5946;
+  const generateNearbyCabs = (center) => {
+    const centerLat = center ? center.lat : 12.9716;
+    const centerLng = center ? center.lng : 77.5946;
     const cabs = Array.from({ length: 6 }, (_, i) => ({
       name: `Cab #${Math.round(Math.random() * 900) + 100}`,
       vehicleType: i % 3 === 0 ? 'bike' : i % 3 === 1 ? 'sedan' : 'suv',
       rating: (4.2 + Math.random() * 0.8).toFixed(1),
-      vehicleNumber: `KA-03-M-${Math.round(Math.random() * 9000) + 1000}`,
+      vehicleNumber: `KA-51-M-${Math.round(Math.random() * 9000) + 1000}`,
       currentLocation: {
-        lat: centerLat + (Math.random() - 0.5) * 0.08,
-        lng: centerLng + (Math.random() - 0.5) * 0.08
+        lat: centerLat + (Math.random() - 0.5) * 0.05,
+        lng: centerLng + (Math.random() - 0.5) * 0.05
       }
     }));
     setNearbyDrivers(cabs);
   };
 
-  const handleSelectPickup = (e) => {
-    const idx = e.target.value;
-    setPickupIdx(idx);
-    if (idx !== '') {
-      setPickupLoc(LOCATIONS[idx]);
+  // Live Location Fetcher using Geolocation API
+  const handleLocateUser = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18`);
+          const data = await res.json();
+          const addressName = data.display_name || `Live Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+          setPickupLoc({ name: addressName, lat: latitude, lng: longitude });
+          setPickupQuery(addressName);
+        } catch (err) {
+          console.error(err);
+          const fallbackName = `Live Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+          setPickupLoc({ name: fallbackName, lat: latitude, lng: longitude });
+          setPickupQuery(fallbackName);
+        } finally {
+          setLocating(false);
+          setEstimates(null);
+        }
+      },
+      (error) => {
+        console.error(error);
+        alert(`Failed to retrieve live location: ${error.message}`);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  // Nominatim Address Search for India
+  const handleSearchAddress = async (query, isPickup) => {
+    if (!query || query.trim() === '') return;
+    if (isPickup) setSearchingPickup(true);
+    else setSearchingDropoff(true);
+
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&countrycodes=in&limit=5`);
+      const data = await res.json();
+      if (isPickup) {
+        setPickupSuggestions(data);
+      } else {
+        setDropoffSuggestions(data);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Geocoding search failed. Please check network connection.');
+    } finally {
+      if (isPickup) setSearchingPickup(false);
+      else setSearchingDropoff(false);
+    }
+  };
+
+  const handleSelectSuggestion = (item, isPickup) => {
+    const locObj = {
+      name: item.display_name,
+      lat: parseFloat(item.lat),
+      lng: parseFloat(item.lon)
+    };
+    if (isPickup) {
+      setPickupLoc(locObj);
+      setPickupQuery(item.display_name);
+      setPickupSuggestions([]);
     } else {
-      setPickupLoc(null);
+      setDropoffLoc(locObj);
+      setDropoffQuery(item.display_name);
+      setDropoffSuggestions([]);
     }
     setEstimates(null);
   };
 
-  const handleSelectDropoff = (e) => {
-    const idx = e.target.value;
-    setDropoffIdx(idx);
-    if (idx !== '') {
-      setDropoffLoc(LOCATIONS[idx]);
-    } else {
-      setDropoffLoc(null);
-    }
-    setEstimates(null);
-  };
-
-  const handleMapClick = (latlng) => {
+  // Map Click placing pins (and reverse geocodes addresses dynamically!)
+  const handleMapClick = async (latlng) => {
     if (activeRide) return;
+    const tempName = `Selected Pin (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`;
+
     if (!pickupLoc) {
-      setPickupLoc({ name: `Dropped Pin (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`, lat: latlng.lat, lng: latlng.lng });
-      setPickupIdx('');
+      setPickupLoc({ name: tempName, lat: latlng.lat, lng: latlng.lng });
+      setPickupQuery(tempName);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}&zoom=18`);
+        const data = await res.json();
+        const realName = data.display_name || tempName;
+        setPickupLoc({ name: realName, lat: latlng.lat, lng: latlng.lng });
+        setPickupQuery(realName);
+      } catch (err) {
+        console.error(err);
+      }
     } else if (!dropoffLoc) {
-      setDropoffLoc({ name: `Dropped Pin (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`, lat: latlng.lat, lng: latlng.lng });
-      setDropoffIdx('');
+      setDropoffLoc({ name: tempName, lat: latlng.lat, lng: latlng.lng });
+      setDropoffQuery(tempName);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}&zoom=18`);
+        const data = await res.json();
+        const realName = data.display_name || tempName;
+        setDropoffLoc({ name: realName, lat: latlng.lat, lng: latlng.lng });
+        setDropoffQuery(realName);
+      } catch (err) {
+        console.error(err);
+      }
     } else {
-      setPickupLoc({ name: `Dropped Pin (${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)})`, lat: latlng.lat, lng: latlng.lng });
+      setPickupLoc({ name: tempName, lat: latlng.lat, lng: latlng.lng });
+      setPickupQuery(tempName);
       setDropoffLoc(null);
-      setPickupIdx('');
-      setDropoffIdx('');
+      setDropoffQuery('');
       setEstimates(null);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}&zoom=18`);
+        const data = await res.json();
+        const realName = data.display_name || tempName;
+        setPickupLoc({ name: realName, lat: latlng.lat, lng: latlng.lng });
+        setPickupQuery(realName);
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -255,7 +345,6 @@ export default function UserDashboard() {
       });
       if (res.data.success) {
         setEstimates(res.data);
-        // Apply initial discount check if code is already inputted
         applyDiscountCode(res.data.estimates[selectedVehicle].fare);
       }
     } catch (err) {
@@ -274,7 +363,7 @@ export default function UserDashboard() {
 
   const applyDiscountCode = (base) => {
     if (promoCode.toUpperCase() === 'WELCOME5') {
-      setDiscountAmount(5.00);
+      setDiscountAmount(50.00); // 50 Rupees discount
       setAppliedPromo('WELCOME5');
     } else if (promoCode.toUpperCase() === 'UCAB20') {
       setDiscountAmount(parseFloat((base * 0.2).toFixed(2)));
@@ -366,7 +455,7 @@ export default function UserDashboard() {
     }
   };
 
-  // Buy refreshments during trip
+  // Buy refreshments during trip (Rupees pricing)
   const buyDrinkOrSnack = async (item, price) => {
     if (!activeRide) return;
     try {
@@ -451,9 +540,9 @@ export default function UserDashboard() {
     if (!activeRide || isSimulating) return;
 
     setIsSimulating(true);
-    // Dave Driver starts near Bangalore city center
-    let startLat = headingToPickup ? 12.9600 : activeRide.pickupLocation.lat;
-    let startLng = headingToPickup ? 77.5800 : activeRide.pickupLocation.lng;
+    // Spawns driver close to pickup location dynamically (roughly 1.2km offset)
+    let startLat = headingToPickup ? activeRide.pickupLocation.lat - 0.012 : activeRide.pickupLocation.lat;
+    let startLng = headingToPickup ? activeRide.pickupLocation.lng - 0.012 : activeRide.pickupLocation.lng;
     
     const endLat = headingToPickup ? activeRide.pickupLocation.lat : activeRide.dropoffLocation.lat;
     const endLng = headingToPickup ? activeRide.pickupLocation.lng : activeRide.dropoffLocation.lng;
@@ -499,7 +588,7 @@ export default function UserDashboard() {
 
   // Live total calculation for estimated box
   const liveEstBase = estimates ? estimates.estimates[selectedVehicle].fare : 0;
-  const liveEstTotal = Math.max(0.5, liveEstBase - discountAmount + donationAmount);
+  const liveEstTotal = Math.max(10, liveEstBase - discountAmount + donationAmount);
 
   return (
     <div className="container py-4">
@@ -542,7 +631,7 @@ export default function UserDashboard() {
                   </div>
                   <div className="small">
                     <strong>Transaction ID:</strong> {paymentSuccess.transactionId}<br />
-                    <strong>Charged Amount:</strong> ${paymentSuccess.amount}<br />
+                    <strong>Charged Amount:</strong> ₹{paymentSuccess.amount}<br />
                     <strong>Charged Card:</strong> {paymentSuccess.paymentMethod}
                   </div>
                 </div>
@@ -567,7 +656,7 @@ export default function UserDashboard() {
                       <strong className="text-white">Dave Driver (Sedan)</strong>
                       <span className="text-warning">★ 4.9</span>
                     </div>
-                    <div className="text-secondary small mb-2">Plate: {activeRide.driver?.vehicleNumber || 'KA-01-AB-1234'}</div>
+                    <div className="text-secondary small mb-2">Plate: {activeRide.driver?.vehicleNumber || 'KA-51-AB-1234'}</div>
                     <div className="text-secondary small">
                       <strong>From:</strong> {activeRide.pickupLocation.name}<br />
                       <strong>To:</strong> {activeRide.dropoffLocation.name}
@@ -611,35 +700,35 @@ export default function UserDashboard() {
                         <span className="text-white fw-bold">Trip in Progress...</span>
                       </div>
 
-                      {/* Buy refreshments */}
+                      {/* Buy refreshments in Rupees */}
                       <div className="p-3 bg-dark rounded border border-secondary">
                         <h6 className="text-glow text-white mb-3 small fw-bold">🥤 Buy Refreshments during the ride</h6>
                         <div className="row g-2">
                           <div className="col-4">
                             <button 
-                              onClick={() => buyDrinkOrSnack('Cold Mineral Water', 1.00)} 
+                              onClick={() => buyDrinkOrSnack('Cold Mineral Water', 20.00)} 
                               className="btn btn-outline-info btn-sm w-100 rounded-pill py-2"
                               style={{ fontSize: '10px' }}
                             >
-                              💧 Water ($1.00)
+                              💧 Water (₹20)
                             </button>
                           </div>
                           <div className="col-4">
                             <button 
-                              onClick={() => buyDrinkOrSnack('Fizzy Soda', 1.50)} 
+                              onClick={() => buyDrinkOrSnack('Fizzy Soda', 40.00)} 
                               className="btn btn-outline-info btn-sm w-100 rounded-pill py-2"
                               style={{ fontSize: '10px' }}
                             >
-                              🥤 Soda ($1.50)
+                              🥤 Soda (₹40)
                             </button>
                           </div>
                           <div className="col-4">
                             <button 
-                              onClick={() => buyDrinkOrSnack('Energy Bar', 2.00)} 
+                              onClick={() => buyDrinkOrSnack('Energy Bar', 60.00)} 
                               className="btn btn-outline-info btn-sm w-100 rounded-pill py-2"
                               style={{ fontSize: '10px' }}
                             >
-                              🍪 Snack ($2.00)
+                              🍪 Snack (₹60)
                             </button>
                           </div>
                         </div>
@@ -652,7 +741,7 @@ export default function UserDashboard() {
                           {activeRide.refreshments.map((ref, idx) => (
                             <div key={idx} className="d-flex justify-content-between mb-1">
                               <span>{ref.item} x{ref.qty}</span>
-                              <span className="text-white">${ref.price * ref.qty}</span>
+                              <span className="text-white">₹{ref.price * ref.qty}</span>
                             </div>
                           ))}
                         </div>
@@ -668,30 +757,30 @@ export default function UserDashboard() {
                       <div className="bg-black rounded p-3 text-start border border-secondary">
                         <div className="d-flex justify-content-between small text-secondary">
                           <span>Base Cab Fare:</span>
-                          <span className="text-white">${activeRide.baseFare}</span>
+                          <span className="text-white">₹{activeRide.baseFare}</span>
                         </div>
                         {activeRide.discountAmount > 0 && (
                           <div className="d-flex justify-content-between small text-danger">
                             <span>Discount ({activeRide.promoApplied}):</span>
-                            <span>-${activeRide.discountAmount}</span>
+                            <span>-₹{activeRide.discountAmount}</span>
                           </div>
                         )}
                         {activeRide.donationAmount > 0 && (
                           <div className="d-flex justify-content-between small text-success">
                             <span>Donation:</span>
-                            <span>+${activeRide.donationAmount}</span>
+                            <span>+₹{activeRide.donationAmount}</span>
                           </div>
                         )}
                         {activeRide.refreshmentsTotal > 0 && (
                           <div className="d-flex justify-content-between small text-info">
                             <span>Refreshments total:</span>
-                            <span>+${activeRide.refreshmentsTotal}</span>
+                            <span>+₹{activeRide.refreshmentsTotal}</span>
                           </div>
                         )}
                         <hr className="border-secondary my-2" />
                         <div className="d-flex justify-content-between fw-bold fs-4 text-white">
                           <span>Total Fare:</span>
-                          <span>${activeRide.fare}</span>
+                          <span>₹{activeRide.fare}</span>
                         </div>
                       </div>
 
@@ -736,30 +825,30 @@ export default function UserDashboard() {
                       <strong className="text-white d-block mb-1">Live Fare Breakdown:</strong>
                       <div className="d-flex justify-content-between">
                         <span>Base Ride Fare:</span>
-                        <span className="text-white">${activeRide.baseFare}</span>
+                        <span className="text-white">₹{activeRide.baseFare}</span>
                       </div>
                       {activeRide.discountAmount > 0 && (
                         <div className="d-flex justify-content-between text-danger">
                           <span>Discount ({activeRide.promoApplied}):</span>
-                          <span>-${activeRide.discountAmount}</span>
+                          <span>-₹{activeRide.discountAmount}</span>
                         </div>
                       )}
                       {activeRide.donationAmount > 0 && (
                         <div className="d-flex justify-content-between text-success">
                           <span>Donation:</span>
-                          <span>+${activeRide.donationAmount}</span>
+                          <span>+₹{activeRide.donationAmount}</span>
                         </div>
                       )}
                       {activeRide.refreshmentsTotal > 0 && (
                         <div className="d-flex justify-content-between text-info">
                           <span>Refreshments:</span>
-                          <span>+${activeRide.refreshmentsTotal}</span>
+                          <span>+₹{activeRide.refreshmentsTotal}</span>
                         </div>
                       )}
                       <hr className="border-secondary my-2" />
                       <div className="d-flex justify-content-between fw-bold text-white fs-5">
                         <span>Current Fare:</span>
-                        <span>${activeRide.fare}</span>
+                        <span>₹{activeRide.fare}</span>
                       </div>
                     </div>
                   )}
@@ -776,34 +865,93 @@ export default function UserDashboard() {
                 /* Booking Panel */
                 <div className="d-flex flex-column gap-3">
                   <h3 className="text-white mb-1">Request Cab</h3>
-                  <p className="text-secondary small mb-2">Pin locations on map or pick from dropdown spots.</p>
+                  <p className="text-secondary small mb-2">Pin locations on map or search for any spot in India.</p>
 
-                  <div>
+                  {/* Live Search Pickup Box */}
+                  <div className="position-relative">
                     <label className="form-label text-secondary small">Pickup point</label>
-                    <select 
-                      className="form-select custom-input" 
-                      value={pickupIdx} 
-                      onChange={handleSelectPickup}
-                    >
-                      <option value="">-- Choose Spot or Click Map --</option>
-                      {LOCATIONS.map((loc, idx) => (
-                        <option key={idx} value={idx}>{loc.name}</option>
-                      ))}
-                    </select>
+                    <div className="input-group">
+                      <input 
+                        type="text" 
+                        className="form-control custom-input" 
+                        placeholder="Search pickup address in India..."
+                        value={pickupQuery}
+                        onChange={(e) => {
+                          setPickupQuery(e.target.value);
+                          if (e.target.value === '') setPickupLoc(null);
+                        }}
+                      />
+                      <button 
+                        type="button" 
+                        onClick={handleLocateUser} 
+                        disabled={locating}
+                        className="btn btn-outline-info"
+                        title="Use Live Location"
+                      >
+                        {locating ? '📡' : '🎯'}
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => handleSearchAddress(pickupQuery, true)}
+                        className="btn btn-outline-indigo px-3"
+                        disabled={searchingPickup}
+                      >
+                        {searchingPickup ? '...' : 'Search'}
+                      </button>
+                    </div>
+                    {pickupSuggestions.length > 0 && (
+                      <div className="bg-dark border border-secondary rounded mt-1 position-absolute w-100 shadow-lg" style={{ zIndex: 1000, maxHeight: '200px', overflowY: 'auto' }}>
+                        {pickupSuggestions.map((s, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => handleSelectSuggestion(s, true)}
+                            className="p-2.5 text-white small cursor-pointer hover-bg border-bottom border-secondary text-truncate"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            📍 {s.display_name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  <div>
+                  {/* Live Search Dropoff Box */}
+                  <div className="position-relative">
                     <label className="form-label text-secondary small">Dropoff point</label>
-                    <select 
-                      className="form-select custom-input" 
-                      value={dropoffIdx} 
-                      onChange={handleSelectDropoff}
-                    >
-                      <option value="">-- Choose Spot or Click Map --</option>
-                      {LOCATIONS.map((loc, idx) => (
-                        <option key={idx} value={idx}>{loc.name}</option>
-                      ))}
-                    </select>
+                    <div className="input-group">
+                      <input 
+                        type="text" 
+                        className="form-control custom-input" 
+                        placeholder="Search destination in India..."
+                        value={dropoffQuery}
+                        onChange={(e) => {
+                          setDropoffQuery(e.target.value);
+                          if (e.target.value === '') setDropoffLoc(null);
+                        }}
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => handleSearchAddress(dropoffQuery, false)}
+                        className="btn btn-outline-indigo px-3"
+                        disabled={searchingDropoff}
+                      >
+                        {searchingDropoff ? '...' : 'Search'}
+                      </button>
+                    </div>
+                    {dropoffSuggestions.length > 0 && (
+                      <div className="bg-dark border border-secondary rounded mt-1 position-absolute w-100 shadow-lg" style={{ zIndex: 1000, maxHeight: '200px', overflowY: 'auto' }}>
+                        {dropoffSuggestions.map((s, idx) => (
+                          <div 
+                            key={idx} 
+                            onClick={() => handleSelectSuggestion(s, false)}
+                            className="p-2.5 text-white small cursor-pointer hover-bg border-bottom border-secondary text-truncate"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            🏁 {s.display_name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="d-flex gap-2">
@@ -819,7 +967,7 @@ export default function UserDashboard() {
                     </button>
                     {(pickupLoc || dropoffLoc) && (
                       <button 
-                        onClick={() => { setPickupLoc(null); setDropoffLoc(null); setPickupIdx(''); setDropoffIdx(''); setEstimates(null); }}
+                        onClick={() => { setPickupLoc(null); setDropoffLoc(null); setPickupQuery(''); setDropoffQuery(''); setEstimates(null); }}
                         className="btn btn-outline-danger px-3 rounded-pill mt-2"
                       >
                         Reset
@@ -856,7 +1004,7 @@ export default function UserDashboard() {
                                   <div className="text-secondary x-small" style={{ fontSize: '11px' }}>ETA: {est.eta} mins away</div>
                                 </div>
                               </div>
-                              <div className="text-white fw-bold fs-5">${est.fare}</div>
+                              <div className="text-white fw-bold fs-5">₹{est.fare}</div>
                             </div>
                           ))}
                         </div>
@@ -875,10 +1023,10 @@ export default function UserDashboard() {
                           />
                           <button onClick={applyPromo} className="btn btn-outline-indigo" type="button">Apply</button>
                         </div>
-                        {appliedPromo && <span className="badge bg-success-subtle text-success border border-success mt-1 rounded-pill px-2 py-1 small">Promo applied: {appliedPromo} (-${discountAmount})</span>}
+                        {appliedPromo && <span className="badge bg-success-subtle text-success border border-success mt-1 rounded-pill px-2 py-1 small">Promo applied: {appliedPromo} (-₹{discountAmount})</span>}
                       </div>
 
-                      {/* Donations options */}
+                      {/* Donations options (Rupees) */}
                       <div>
                         <label className="form-label text-secondary small">Donate to Green Earth Foundation</label>
                         <div className="btn-group w-100 bg-dark rounded border border-secondary p-1">
@@ -892,53 +1040,53 @@ export default function UserDashboard() {
                           </button>
                           <button 
                             type="button" 
-                            onClick={() => setDonationAmount(1)}
-                            className={`btn btn-xs rounded-pill py-1.5 border-0 ${donationAmount === 1 ? 'btn-success text-white' : 'text-secondary'}`}
+                            onClick={() => setDonationAmount(10)}
+                            className={`btn btn-xs rounded-pill py-1.5 border-0 ${donationAmount === 10 ? 'btn-success text-white' : 'text-secondary'}`}
                             style={{ fontSize: '11px' }}
                           >
-                            +$1
+                            +₹10
                           </button>
                           <button 
                             type="button" 
-                            onClick={() => setDonationAmount(2)}
-                            className={`btn btn-xs rounded-pill py-1.5 border-0 ${donationAmount === 2 ? 'btn-success text-white' : 'text-secondary'}`}
+                            onClick={() => setDonationAmount(20)}
+                            className={`btn btn-xs rounded-pill py-1.5 border-0 ${donationAmount === 20 ? 'btn-success text-white' : 'text-secondary'}`}
                             style={{ fontSize: '11px' }}
                           >
-                            +$2
+                            +₹20
                           </button>
                           <button 
                             type="button" 
-                            onClick={() => setDonationAmount(5)}
-                            className={`btn btn-xs rounded-pill py-1.5 border-0 ${donationAmount === 5 ? 'btn-success text-white' : 'text-secondary'}`}
+                            onClick={() => setDonationAmount(50)}
+                            className={`btn btn-xs rounded-pill py-1.5 border-0 ${donationAmount === 50 ? 'btn-success text-white' : 'text-secondary'}`}
                             style={{ fontSize: '11px' }}
                           >
-                            +$5
+                            +₹50
                           </button>
                         </div>
                       </div>
 
-                      {/* Fare Breakdown summary */}
+                      {/* Fare Breakdown summary in Rupees */}
                       <div className="bg-black rounded-3 p-3 border border-secondary small">
                         <div className="d-flex justify-content-between text-secondary">
                           <span>Base Cab Fare:</span>
-                          <span className="text-white">${liveEstBase}</span>
+                          <span className="text-white">₹{liveEstBase}</span>
                         </div>
                         {discountAmount > 0 && (
                           <div className="d-flex justify-content-between text-danger">
                             <span>Discount Applied:</span>
-                            <span>-${discountAmount}</span>
+                            <span>-₹{discountAmount}</span>
                           </div>
                         )}
                         {donationAmount > 0 && (
                           <div className="d-flex justify-content-between text-success">
                             <span>Donation:</span>
-                            <span>+${donationAmount}</span>
+                            <span>+₹{donationAmount}</span>
                           </div>
                         )}
                         <hr className="border-secondary my-1.5" />
                         <div className="d-flex justify-content-between fw-bold text-white fs-5">
                           <span>Est. Total:</span>
-                          <span>${liveEstTotal}</span>
+                          <span>₹{liveEstTotal}</span>
                         </div>
                       </div>
 
@@ -1086,16 +1234,16 @@ export default function UserDashboard() {
                     <tr key={ride._id} className="border-secondary">
                       <td className="small">{new Date(ride.createdAt).toLocaleDateString()}</td>
                       <td className="small">
-                        <div><strong>From:</strong> {ride.pickupLocation.name}</div>
-                        <div><strong>To:</strong> {ride.dropoffLocation.name}</div>
+                        <div className="text-truncate" style={{ maxWidth: '220px' }}><strong>From:</strong> {ride.pickupLocation.name}</div>
+                        <div className="text-truncate" style={{ maxWidth: '220px' }}><strong>To:</strong> {ride.dropoffLocation.name}</div>
                       </td>
                       <td className="small text-secondary">
-                        <div>Base: ${ride.baseFare}</div>
-                        {ride.discountAmount > 0 && <div className="text-danger">Promo: -${ride.discountAmount}</div>}
-                        {ride.donationAmount > 0 && <div className="text-success">Donation: +${ride.donationAmount}</div>}
+                        <div>Base: ₹{ride.baseFare}</div>
+                        {ride.discountAmount > 0 && <div className="text-danger">Promo: -₹{ride.discountAmount}</div>}
+                        {ride.donationAmount > 0 && <div className="text-success">Donation: +₹{ride.donationAmount}</div>}
                         {ride.refreshmentsTotal > 0 && (
                           <div className="text-info">
-                            Refreshments: +${ride.refreshmentsTotal}
+                            Refreshments: +₹{ride.refreshmentsTotal}
                             <span 
                               className="d-block text-secondary text-xx-small" 
                               style={{ fontSize: '9px' }}
@@ -1105,7 +1253,7 @@ export default function UserDashboard() {
                           </div>
                         )}
                       </td>
-                      <td className="fw-bold text-white">${ride.fare}</td>
+                      <td className="fw-bold text-white">₹{ride.fare}</td>
                       <td>
                         <span className={`badge rounded-pill px-3 py-1.5 ${
                           ride.status === 'completed' ? 'bg-success-subtle text-success border border-success' :

@@ -33,21 +33,21 @@ const getFareEstimate = async (req, res, next) => {
 
     const estimates = {
       bike: {
-        fare: Math.round(Math.max(2, 2.0 + dist * 0.8)),
+        fare: Math.round(Math.max(30, 30.0 + dist * 10)),
         vehicleType: 'bike',
         name: 'Moto Bike',
         description: 'Fastest solo travel through traffic',
         eta: Math.max(1, Math.round(Math.random() * 3) + 1) // Estimated arrival time in mins
       },
       sedan: {
-        fare: Math.round(Math.max(5, 5.0 + dist * 1.5)),
+        fare: Math.round(Math.max(70, 70.0 + dist * 15)),
         vehicleType: 'sedan',
         name: 'Standard Sedan',
         description: 'Comfortable everyday sedans',
         eta: Math.max(1, Math.round(Math.random() * 4) + 2)
       },
       suv: {
-        fare: Math.round(Math.max(8, 8.0 + dist * 2.5)),
+        fare: Math.round(Math.max(120, 120.0 + dist * 25)),
         vehicleType: 'suv',
         name: 'Premium SUV',
         description: 'Spacious 6-seater premium rides',
