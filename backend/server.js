@@ -44,6 +44,9 @@ const path = require('path');
 const fs = require('fs');
 const distPath = path.join(__dirname, '../frontend/dist');
 
+console.log(`[Startup] Target frontend build path: ${distPath}`);
+console.log(`[Startup] Frontend build directory exists: ${fs.existsSync(distPath)}`);
+
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.get('*', (req, res) => {
