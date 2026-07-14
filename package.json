@@ -1,0 +1,10 @@
+{
+  "name": "ucab-root",
+  "version": "1.0.0",
+  "description": "Ucab - Root Hailing System Deployment Workspace",
+  "main": "backend/server.js",
+  "scripts": {
+    "install-backend": "npm install --prefix backend",
+    "start": "node backend/server.js"
+  }
+}
