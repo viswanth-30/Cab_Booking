@@ -55,6 +55,7 @@ export default function UserDashboard() {
   // Payment settling
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(null);
+  const [paymentMode, setPaymentMode] = useState('card'); // 'card' | 'cash'
 
   const API_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:5000/api'
@@ -532,20 +533,26 @@ export default function UserDashboard() {
     }
   };
 
-  // Complete Payment automatically using selected saved card
+  // Complete Payment automatically using selected saved card or cash
   const handleAutoPayment = async () => {
-    if (savedCards.length === 0) {
+    if (paymentMode === 'card' && savedCards.length === 0) {
       alert('Please add a saved payment method first under the Payment Cards tab!');
       return;
     }
     setPaymentLoading(true);
     try {
-      const card = savedCards.find(c => c._id === selectedCardId);
-      const methodText = card ? `${card.cardBrand} ending in ${card.last4}` : 'Saved Card';
+      let methodText = 'Cash';
+      let payMethod = 'cash';
+
+      if (paymentMode === 'card') {
+        const card = savedCards.find(c => c._id === selectedCardId);
+        methodText = card ? `${card.cardBrand} ending in ${card.last4}` : 'Saved Card';
+        payMethod = 'card';
+      }
       
       const res = await axios.post(`${API_URL}/payments/process`, {
         rideId: activeRide._id,
-        paymentMethod: 'card'
+        paymentMethod: payMethod
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -560,6 +567,7 @@ export default function UserDashboard() {
       }
     } catch (err) {
       console.error(err);
+      alert('Payment authorization failed.');
     } finally {
       setPaymentLoading(false);
     }
@@ -823,38 +831,78 @@ export default function UserDashboard() {
                         </div>
                       </div>
 
-                      {/* Auto payment method selector */}
-                      <div className="text-start">
-                        <label className="form-label text-secondary small">Charge to Saved Card</label>
-                        {savedCards.length === 0 ? (
-                          <div className="alert alert-warning border-0 p-2.5 rounded small mb-3">
-                            ⚠️ No saved cards found. Please click the <strong>Payment Cards</strong> tab above and save a card to pay automatically!
-                          </div>
-                        ) : (
-                          <select 
-                            className="form-select custom-input mb-3"
-                            value={selectedCardId}
-                            onChange={(e) => setSelectedCardId(e.target.value)}
-                          >
-                            {savedCards.map(c => (
-                              <option key={c._id} value={c._id}>
-                                {c.cardBrand} ending in {c.last4} ({c.cardholderName})
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                      {/* Payment Mode Selector */}
+                      <div className="btn-group w-100 mb-2 bg-dark p-1 rounded border border-secondary">
+                        <button 
+                          type="button" 
+                          onClick={() => setPaymentMode('card')}
+                          className={`btn btn-sm rounded-pill border-0 ${paymentMode === 'card' ? 'btn-secondary text-white' : 'text-secondary'}`}
+                        >
+                          💳 Pay Online
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => setPaymentMode('cash')}
+                          className={`btn btn-sm rounded-pill border-0 ${paymentMode === 'cash' ? 'btn-success text-white' : 'text-secondary'}`}
+                        >
+                          💵 Cash to Driver
+                        </button>
                       </div>
 
-                      <button 
-                        onClick={handleAutoPayment} 
-                        disabled={paymentLoading || savedCards.length === 0}
-                        className="btn glow-btn btn-lg w-100 py-3 rounded-pill"
-                      >
-                        {paymentLoading ? (
-                          <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                        ) : null}
-                        Authorize Automatic Payment
-                      </button>
+                      {paymentMode === 'card' ? (
+                        <>
+                          {/* Auto payment method selector */}
+                          <div className="text-start">
+                            <label className="form-label text-secondary small">Charge to Saved Card</label>
+                            {savedCards.length === 0 ? (
+                              <div className="alert alert-warning border-0 p-2.5 rounded small mb-3">
+                                ⚠️ No saved cards found. Please click the <strong>Payment Cards</strong> tab above and save a card to pay automatically!
+                              </div>
+                            ) : (
+                              <select 
+                                className="form-select custom-input mb-3"
+                                value={selectedCardId}
+                                onChange={(e) => setSelectedCardId(e.target.value)}
+                              >
+                                {savedCards.map(c => (
+                                  <option key={c._id} value={c._id}>
+                                    {c.cardBrand} ending in {c.last4} ({c.cardholderName})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+
+                          <button 
+                            onClick={handleAutoPayment} 
+                            disabled={paymentLoading || savedCards.length === 0}
+                            className="btn glow-btn btn-lg w-100 py-3 rounded-pill"
+                          >
+                            {paymentLoading ? (
+                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                            ) : null}
+                            Authorize Automatic Payment
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="alert alert-success border-0 bg-success-subtle text-success p-3 rounded-3 text-start small mb-3">
+                            <strong>💡 Cash Payment Details:</strong><br />
+                            Please hand over exactly <strong>₹{activeRide.fare}</strong> in cash to Dave Driver at your destination.
+                          </div>
+
+                          <button 
+                            onClick={handleAutoPayment} 
+                            disabled={paymentLoading}
+                            className="btn btn-success btn-lg w-100 py-3 rounded-pill"
+                          >
+                            {paymentLoading ? (
+                              <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                            ) : null}
+                            Confirm Cash Payment to Driver
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
 
