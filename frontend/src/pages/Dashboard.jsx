@@ -2,7 +2,12 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import UserDashboard from './UserDashboard';
+import DriverDashboard from './DriverDashboard';
+import AdminDashboard from './AdminDashboard';
 
+/**
+ * Dashboard router — directs users to role-specific dashboards
+ */
 export default function Dashboard() {
   const { user, loading } = useAuth();
 
@@ -19,6 +24,13 @@ export default function Dashboard() {
     return <Navigate to="/login" replace />;
   }
 
-  // All roles use the simplified, interactive Ucab rider booking dashboard!
-  return <UserDashboard />;
+  // Route to role-specific dashboard
+  switch (user.role) {
+    case 'driver':
+      return <DriverDashboard />;
+    case 'admin':
+      return <AdminDashboard />;
+    default:
+      return <UserDashboard />;
+  }
 }

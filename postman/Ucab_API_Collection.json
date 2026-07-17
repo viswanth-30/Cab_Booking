@@ -1,0 +1,259 @@
+{
+  "info": {
+    "name": "Ucab Cab Booking API",
+    "description": "Complete API collection for Ucab MERN Stack Cab Booking System",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "token", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"user\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Register Driver",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Driver\",\n  \"email\": \"testdriver@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"driver\",\n  \"vehicleType\": \"sedan\",\n  \"vehicleNumber\": \"KA-01-XX-9999\",\n  \"licenseNumber\": \"DL-9999999999\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login (Rider)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"rider@ucab.com\",\n  \"password\": \"rider123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login (Driver)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"driver@ucab.com\",\n  \"password\": \"driver123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login (Admin)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@ucab.com\",\n  \"password\": \"admin123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Profile",
+          "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" }
+        },
+        {
+          "name": "Toggle Online",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/auth/toggle-online" }
+        },
+        {
+          "name": "Update Location",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/auth/location",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lat\": 12.9716,\n  \"lng\": 77.5946\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Saved Cards",
+          "request": { "method": "GET", "url": "{{baseUrl}}/auth/cards" }
+        },
+        {
+          "name": "Add Saved Card",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/cards/add",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cardBrand\": \"Visa\",\n  \"last4\": \"1234\",\n  \"cardholderName\": \"Test User\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rides",
+      "item": [
+        {
+          "name": "Get Fare Estimate",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/rides/estimate?pickupLat=12.9716&pickupLng=77.5946&dropoffLat=12.9784&dropoffLng=77.6408",
+              "host": ["{{baseUrl}}"],
+              "path": ["rides", "estimate"],
+              "query": [
+                { "key": "pickupLat", "value": "12.9716" },
+                { "key": "pickupLng", "value": "77.5946" },
+                { "key": "dropoffLat", "value": "12.9784" },
+                { "key": "dropoffLng", "value": "77.6408" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Book Ride",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/rides/book",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pickupLocation\": { \"name\": \"MG Road\", \"lat\": 12.9716, \"lng\": 77.5946 },\n  \"dropoffLocation\": { \"name\": \"Indiranagar\", \"lat\": 12.9784, \"lng\": 77.6408 },\n  \"vehicleType\": \"sedan\",\n  \"baseFare\": 151,\n  \"promoApplied\": \"\",\n  \"discountAmount\": 0,\n  \"donationAmount\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Active Ride",
+          "request": { "method": "GET", "url": "{{baseUrl}}/rides/active" }
+        },
+        {
+          "name": "Get Ride History",
+          "request": { "method": "GET", "url": "{{baseUrl}}/rides/history" }
+        },
+        {
+          "name": "Update Ride Status",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/rides/status",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rideId\": \"RIDE_ID_HERE\",\n  \"status\": \"accepted\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Driver",
+      "item": [
+        {
+          "name": "Get Driver Rides",
+          "request": { "method": "GET", "url": "{{baseUrl}}/rides/driver/rides" }
+        },
+        {
+          "name": "Get Driver Active Ride",
+          "request": { "method": "GET", "url": "{{baseUrl}}/rides/driver/active" }
+        },
+        {
+          "name": "Accept Ride",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/rides/driver/accept/RIDE_ID_HERE" }
+        },
+        {
+          "name": "Reject Ride",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/rides/driver/reject/RIDE_ID_HERE" }
+        },
+        {
+          "name": "Update Driver Ride Status",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/rides/driver/status",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rideId\": \"RIDE_ID_HERE\",\n  \"status\": \"pickup\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Process Payment",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/payments/process",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rideId\": \"RIDE_ID_HERE\",\n  \"paymentMethod\": \"card\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Payment Details",
+          "request": { "method": "GET", "url": "{{baseUrl}}/payments/ride/RIDE_ID_HERE" }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/users" }
+        },
+        {
+          "name": "Search Users",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/users?search=rider" }
+        },
+        {
+          "name": "Get All Drivers",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/drivers" }
+        },
+        {
+          "name": "Verify Driver",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/admin/drivers/DRIVER_ID_HERE/verify" }
+        },
+        {
+          "name": "Get All Rides",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/rides" }
+        },
+        {
+          "name": "Get Booking Stats",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/stats" }
+        },
+        {
+          "name": "Get All Payments",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/payments" }
+        }
+      ]
+    }
+  ]
+}

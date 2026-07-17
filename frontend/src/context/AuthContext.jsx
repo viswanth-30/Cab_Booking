@@ -3,9 +3,10 @@ import axios from 'axios';
 import io from 'socket.io-client';
 
 const AuthContext = createContext();
-const API_URL = window.location.hostname === 'localhost'
-  ? 'http://localhost:5000/api'
-  : '/api';
+
+// Use environment variable for API URL, fallback to /api for production
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -13,26 +14,23 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
 
-  // Helper instance
-  const apiClient = axios.create({
-    baseURL: API_URL
-  });
+  // Axios instance with base URL
+  const apiClient = axios.create({ baseURL: API_URL });
 
   if (token) {
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }
 
+  // Fetch current user on mount / token change
   useEffect(() => {
     const fetchMe = async () => {
       if (token) {
         try {
-          // Set default header manually for first fetch
           const res = await axios.get(`${API_URL}/auth/me`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           setUser(res.data.user);
         } catch (err) {
-          console.error('Session expired or invalid', err);
           logout();
         }
       }
@@ -42,14 +40,13 @@ export const AuthProvider = ({ children }) => {
     fetchMe();
   }, [token]);
 
-  // Socket Connection Management
+  // Socket connection management
   useEffect(() => {
     if (user) {
-      const socketConn = io(window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin);
-      
+      const socketConn = io(SOCKET_URL);
+
       socketConn.on('connect', () => {
         socketConn.emit('join', user._id);
-        console.log('Socket connected & user room joined');
       });
 
       setSocket(socketConn);

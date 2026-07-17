@@ -11,6 +11,16 @@ export default function Navbar() {
     navigate('/');
   };
 
+  // Determine dashboard label based on role
+  const getDashboardLabel = () => {
+    if (!user) return 'Dashboard';
+    switch (user.role) {
+      case 'driver': return 'Driver Panel';
+      case 'admin': return 'Admin Panel';
+      default: return 'Book Ride';
+    }
+  };
+
   return (
     <nav className="navbar navbar-expand-lg navbar-dark navbar-custom py-3 px-4 sticky-top">
       <div className="container-fluid">
@@ -18,7 +28,7 @@ export default function Navbar() {
           <img src="https://img.icons8.com/color/48/taxi.png" alt="Ucab logo" width="36" height="36" />
           <span className="fw-extrabold text-white" style={{ fontFamily: 'var(--font-heading)' }}>Ucab</span>
         </Link>
-        
+
         <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
           <span className="navbar-toggler-icon"></span>
         </button>
@@ -30,7 +40,7 @@ export default function Navbar() {
             </li>
             {user && (
               <li className="nav-item">
-                <Link className="nav-link text-white-50" to="/dashboard">Book Ride</Link>
+                <Link className="nav-link text-white-50" to="/dashboard">{getDashboardLabel()}</Link>
               </li>
             )}
           </ul>
@@ -41,6 +51,7 @@ export default function Navbar() {
                 <span className="badge bg-dark border border-secondary text-light px-3 py-2 rounded-pill d-flex align-items-center gap-2">
                   <i className="bi bi-person-fill text-info"></i>
                   {user.name}
+                  <span className="badge bg-secondary ms-1" style={{ fontSize: '9px' }}>{user.role.toUpperCase()}</span>
                 </span>
 
                 <button onClick={handleLogout} className="btn btn-outline-danger btn-sm px-3 rounded-pill">

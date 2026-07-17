@@ -1,8 +1,19 @@
+const { body, validationResult } = require('express-validator');
 const Payment = require('../models/Payment');
 const Ride = require('../models/Ride');
 
+const paymentValidation = [
+  body('rideId').trim().notEmpty().withMessage('Ride ID is required'),
+  body('paymentMethod').optional().isIn(['card', 'wallet', 'cash']).withMessage('Invalid payment method')
+];
+
 const processPayment = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: errors.array()[0].msg });
+    }
+
     const { rideId, paymentMethod } = req.body;
 
     const ride = await Ride.findById(rideId);
@@ -77,5 +88,6 @@ const getPaymentDetails = async (req, res, next) => {
 
 module.exports = {
   processPayment,
+  paymentValidation,
   getPaymentDetails
 };

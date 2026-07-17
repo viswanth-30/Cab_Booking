@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { 
-  register, 
-  login, 
-  getMe, 
-  toggleOnline, 
+const {
+  register,
+  registerValidation,
+  login,
+  loginValidation,
+  getMe,
+  toggleOnline,
   updateLocation,
   addSavedCard,
   getSavedCards,
@@ -12,13 +14,16 @@ const {
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
-router.post('/register', register);
-router.post('/login', login);
+// Public routes
+router.post('/register', registerValidation, register);
+router.post('/login', loginValidation, login);
+
+// Protected routes
 router.get('/me', protect, getMe);
 router.put('/toggle-online', protect, toggleOnline);
 router.put('/location', protect, updateLocation);
 
-// Saved Cards routes
+// Saved cards routes
 router.get('/cards', protect, getSavedCards);
 router.post('/cards/add', protect, addSavedCard);
 router.delete('/cards/:cardId', protect, deleteSavedCard);

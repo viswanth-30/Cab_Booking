@@ -1,15 +1,48 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 
+/**
+ * Generate JWT token with configurable expiry
+ */
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'supersecretjwtkeyforucabapp12345', {
-    expiresIn: '30d'
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE || '7d'
   });
 };
 
+/**
+ * Validation rules for registration
+ */
+const registerValidation = [
+  body('name').trim().notEmpty().withMessage('Name is required'),
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('role').optional().isIn(['user', 'driver']).withMessage('Role must be user or driver')
+];
+
+/**
+ * Validation rules for login
+ */
+const loginValidation = [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('password').notEmpty().withMessage('Password is required')
+];
+
+/**
+ * @desc    Register a new user
+ * @route   POST /api/auth/register
+ * @access  Public
+ */
 const register = async (req, res, next) => {
   try {
+    // Check validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: errors.array()[0].msg });
+    }
+
     const { name, email, password, role, vehicleType, vehicleNumber, licenseNumber } = req.body;
 
     const userExists = await User.findOne({ email });
@@ -27,13 +60,13 @@ const register = async (req, res, next) => {
       role: role || 'user'
     };
 
+    // Add driver-specific fields
     if (role === 'driver') {
       userData.vehicleType = vehicleType;
       userData.vehicleNumber = vehicleNumber;
       userData.licenseNumber = licenseNumber;
-      userData.isVerified = false; // Admin needs to verify
+      userData.isVerified = false;
       userData.isOnline = false;
-      // Spawn near Bangalore city center
       userData.currentLocation = {
         lat: 12.9716 + (Math.random() - 0.5) * 0.05,
         lng: 77.5946 + (Math.random() - 0.5) * 0.05
@@ -61,8 +94,18 @@ const register = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Authenticate user and get token
+ * @route   POST /api/auth/login
+ * @access  Public
+ */
 const login = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: errors.array()[0].msg });
+    }
+
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
@@ -95,6 +138,11 @@ const login = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Get current logged-in user profile
+ * @route   GET /api/auth/me
+ * @access  Private
+ */
 const getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id);
@@ -122,6 +170,11 @@ const getMe = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Toggle driver online/offline status
+ * @route   PUT /api/auth/toggle-online
+ * @access  Private (Driver only)
+ */
 const toggleOnline = async (req, res, next) => {
   try {
     if (req.user.role !== 'driver') {
@@ -142,6 +195,11 @@ const toggleOnline = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Update driver's current GPS location
+ * @route   PUT /api/auth/location
+ * @access  Private (Driver only)
+ */
 const updateLocation = async (req, res, next) => {
   try {
     if (req.user.role !== 'driver') {
@@ -149,6 +207,10 @@ const updateLocation = async (req, res, next) => {
     }
 
     const { lat, lng } = req.body;
+    if (lat === undefined || lng === undefined) {
+      return res.status(400).json({ success: false, message: 'Latitude and longitude are required' });
+    }
+
     const driver = await User.findById(req.user._id);
     driver.currentLocation = { lat, lng };
     await driver.save();
@@ -162,15 +224,25 @@ const updateLocation = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Add a saved payment card
+ * @route   POST /api/auth/cards/add
+ * @access  Private
+ */
 const addSavedCard = async (req, res, next) => {
   try {
     const { cardBrand, last4, cardholderName } = req.body;
+
+    if (!last4 || !cardholderName) {
+      return res.status(400).json({ success: false, message: 'Card details are required' });
+    }
+
     const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.savedCards.push({ cardBrand, last4, cardholderName });
+    user.savedCards.push({ cardBrand: cardBrand || 'Visa', last4, cardholderName });
     await user.save();
 
     res.json({
@@ -183,6 +255,11 @@ const addSavedCard = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Get user's saved payment cards
+ * @route   GET /api/auth/cards
+ * @access  Private
+ */
 const getSavedCards = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id);
@@ -199,6 +276,11 @@ const getSavedCards = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Delete a saved payment card
+ * @route   DELETE /api/auth/cards/:cardId
+ * @access  Private
+ */
 const deleteSavedCard = async (req, res, next) => {
   try {
     const { cardId } = req.params;
@@ -222,7 +304,9 @@ const deleteSavedCard = async (req, res, next) => {
 
 module.exports = {
   register,
+  registerValidation,
   login,
+  loginValidation,
   getMe,
   toggleOnline,
   updateLocation,

@@ -1,6 +1,38 @@
+const { body, validationResult } = require('express-validator');
 const Ride = require('../models/Ride');
 const User = require('../models/User');
 
+const createRideValidation = [
+  body('pickupLocation.name').trim().notEmpty().withMessage('Pickup location name is required'),
+  body('pickupLocation.lat').isFloat().withMessage('Pickup latitude must be a valid coordinate number'),
+  body('pickupLocation.lng').isFloat().withMessage('Pickup longitude must be a valid coordinate number'),
+  body('dropoffLocation.name').trim().notEmpty().withMessage('Dropoff location name is required'),
+  body('dropoffLocation.lat').isFloat().withMessage('Dropoff latitude must be a valid coordinate number'),
+  body('dropoffLocation.lng').isFloat().withMessage('Dropoff longitude must be a valid coordinate number'),
+  body('vehicleType').isIn(['sedan', 'suv', 'bike']).withMessage('Invalid vehicle type'),
+  body('baseFare').isFloat({ min: 0 }).withMessage('Base fare must be a positive number')
+];
+
+const buyRefreshmentValidation = [
+  body('rideId').trim().notEmpty().withMessage('Ride ID is required'),
+  body('item').trim().notEmpty().withMessage('Item name is required'),
+  body('price').isFloat({ min: 0 }).withMessage('Price must be a positive number'),
+  body('qty').optional().isInt({ min: 1 }).withMessage('Quantity must be a positive integer')
+];
+
+const updateRideStatusValidation = [
+  body('rideId').trim().notEmpty().withMessage('Ride ID is required'),
+  body('status').isIn(['requested', 'accepted', 'pickup', 'inprogress', 'completed', 'cancelled']).withMessage('Invalid status')
+];
+
+const updateDriverRideStatusValidation = [
+  body('rideId').trim().notEmpty().withMessage('Ride ID is required'),
+  body('status').isIn(['pickup', 'inprogress', 'completed']).withMessage('Invalid status transition')
+];
+
+/**
+ * Calculate distance between two coordinates using Haversine formula
+ */
 const getDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371; // Earth's radius in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -13,7 +45,11 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
-// Calculate estimate
+/**
+ * @desc    Get fare estimates for pickup/dropoff
+ * @route   GET /api/rides/estimate
+ * @access  Private
+ */
 const getFareEstimate = async (req, res, next) => {
   try {
     const { pickupLat, pickupLng, dropoffLat, dropoffLng } = req.query;
@@ -29,7 +65,7 @@ const getFareEstimate = async (req, res, next) => {
       parseFloat(dropoffLng)
     );
 
-    const duration = Math.round(dist * 2); // 2 mins per km
+    const duration = Math.round(dist * 2); // ~2 mins per km
 
     const estimates = {
       bike: {
@@ -37,7 +73,7 @@ const getFareEstimate = async (req, res, next) => {
         vehicleType: 'bike',
         name: 'Moto Bike',
         description: 'Fastest solo travel through traffic',
-        eta: Math.max(1, Math.round(Math.random() * 3) + 1) // Estimated arrival time in mins
+        eta: Math.max(1, Math.round(Math.random() * 3) + 1)
       },
       sedan: {
         fare: Math.round(Math.max(70, 70.0 + dist * 15)),
@@ -66,20 +102,29 @@ const getFareEstimate = async (req, res, next) => {
   }
 };
 
-// Create a new Ride request and assign seeded driver
+/**
+ * @desc    Create a new ride booking and assign nearest driver
+ * @route   POST /api/rides/book
+ * @access  Private (Rider)
+ */
 const createRide = async (req, res, next) => {
   try {
-    const { 
-      pickupLocation, 
-      dropoffLocation, 
-      vehicleType, 
-      baseFare, 
-      promoApplied, 
-      discountAmount, 
-      donationAmount 
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: errors.array()[0].msg });
+    }
+
+    const {
+      pickupLocation,
+      dropoffLocation,
+      vehicleType,
+      baseFare,
+      promoApplied,
+      discountAmount,
+      donationAmount
     } = req.body;
 
-    // Check active rides
+    // Check for existing active ride
     const activeRide = await Ride.findOne({
       user: req.user._id,
       status: { $in: ['requested', 'accepted', 'pickup', 'inprogress'] }
@@ -89,23 +134,28 @@ const createRide = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'You already have an active booking' });
     }
 
-    // Find our default seeded driver
-    let matchedDriver = await User.findOne({ email: 'driver@ucab.com' });
+    // Find nearest available verified online driver matching vehicleType
+    let matchedDriver = await User.findOne({
+      role: 'driver',
+      isVerified: true,
+      isOnline: true,
+      vehicleType: vehicleType
+    });
+
+    // Fallback: find any verified driver of the requested vehicleType
     if (!matchedDriver) {
-      // Create a fallback driver on the fly if not seeded
-      matchedDriver = await User.create({
-        name: 'Dave Driver',
-        email: 'driver@ucab.com',
-        password: 'hashedpassword',
+      matchedDriver = await User.findOne({
         role: 'driver',
-        vehicleType: 'sedan',
-        vehicleNumber: 'KA-01-AB-1234',
         isVerified: true,
-        isOnline: true
+        vehicleType: vehicleType
       });
     }
 
-    // Calculate final initial fare: base - discount + donation
+    if (!matchedDriver) {
+      return res.status(404).json({ success: false, message: 'No available drivers found. Please try again later.' });
+    }
+
+    // Calculate final fare
     const finalFare = Math.max(0.5, baseFare - (discountAmount || 0) + (donationAmount || 0));
 
     const ride = await Ride.create({
@@ -125,9 +175,10 @@ const createRide = async (req, res, next) => {
 
     const populatedRide = await Ride.findById(ride._id).populate('user').populate('driver');
 
-    // Emit live update over socket
+    // Emit live updates via socket
     if (req.io) {
       req.io.to(req.user._id.toString()).emit('rideStatusUpdate', populatedRide);
+      req.io.to(matchedDriver._id.toString()).emit('newRideRequest', populatedRide);
     }
 
     res.status(201).json({
@@ -139,9 +190,18 @@ const createRide = async (req, res, next) => {
   }
 };
 
-// Purchase refreshment during active ride
+/**
+ * @desc    Add refreshment during active ride
+ * @route   POST /api/rides/buy-refreshment
+ * @access  Private
+ */
 const buyRefreshment = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: errors.array()[0].msg });
+    }
+
     const { rideId, item, price, qty } = req.body;
 
     const ride = await Ride.findById(rideId);
@@ -149,50 +209,53 @@ const buyRefreshment = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Active ride not found' });
     }
 
-    // Add refreshment item
     ride.refreshments.push({ item, price, qty: qty || 1 });
     ride.refreshmentsTotal += price * (qty || 1);
-    
-    // Recalculate final fare
     ride.fare = Math.max(0.5, ride.baseFare - ride.discountAmount + ride.donationAmount + ride.refreshmentsTotal);
     await ride.save();
 
     const populatedRide = await Ride.findById(ride._id).populate('user').populate('driver');
 
-    // Notify user immediately in real-time
     if (req.io) {
       req.io.to(ride.user.toString()).emit('rideStatusUpdate', populatedRide);
     }
 
-    res.json({
-      success: true,
-      ride: populatedRide
-    });
+    res.json({ success: true, ride: populatedRide });
   } catch (error) {
     next(error);
   }
 };
 
-// Get current active ride
+/**
+ * @desc    Get current active ride for logged-in rider
+ * @route   GET /api/rides/active
+ * @access  Private
+ */
 const getActiveRide = async (req, res, next) => {
   try {
     const ride = await Ride.findOne({
       user: req.user._id,
       status: { $in: ['requested', 'accepted', 'pickup', 'inprogress'] }
     }).populate('user').populate('driver');
-    
-    res.json({
-      success: true,
-      ride: ride || null
-    });
+
+    res.json({ success: true, ride: ride || null });
   } catch (error) {
     next(error);
   }
 };
 
-// Update Ride Status (For automated simulation controls)
+/**
+ * @desc    Update ride status (used by rider for simulation controls)
+ * @route   PUT /api/rides/status
+ * @access  Private
+ */
 const updateRideStatus = async (req, res, next) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: errors.array()[0].msg });
+    }
+
     const { rideId, status } = req.body;
 
     const ride = await Ride.findById(rideId);
@@ -210,6 +273,9 @@ const updateRideStatus = async (req, res, next) => {
 
     if (req.io) {
       req.io.to(ride.user.toString()).emit('rideStatusUpdate', populatedRide);
+      if (ride.driver) {
+        req.io.to(ride.driver.toString()).emit('rideStatusUpdate', populatedRide);
+      }
     }
 
     res.json({ success: true, ride: populatedRide });
@@ -218,14 +284,213 @@ const updateRideStatus = async (req, res, next) => {
   }
 };
 
-// Get Ride History
+/**
+ * @desc    Cancel a ride
+ * @route   PUT /api/rides/cancel/:rideId
+ * @access  Private
+ */
+const cancelRide = async (req, res, next) => {
+  try {
+    const ride = await Ride.findById(req.params.rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    // Only allow cancellation of pending/accepted rides
+    if (!['requested', 'accepted', 'pickup'].includes(ride.status)) {
+      return res.status(400).json({ success: false, message: 'Cannot cancel a ride that is already in progress or completed' });
+    }
+
+    ride.status = 'cancelled';
+    await ride.save();
+
+    const populatedRide = await Ride.findById(ride._id).populate('user').populate('driver');
+
+    if (req.io) {
+      req.io.to(ride.user.toString()).emit('rideStatusUpdate', populatedRide);
+      if (ride.driver) {
+        req.io.to(ride.driver.toString()).emit('rideStatusUpdate', populatedRide);
+      }
+    }
+
+    res.json({ success: true, ride: populatedRide, message: 'Ride cancelled successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get ride history for logged-in rider
+ * @route   GET /api/rides/history
+ * @access  Private
+ */
 const getRideHistory = async (req, res, next) => {
   try {
     const rides = await Ride.find({ user: req.user._id }).populate('user').populate('driver');
-    res.json({
-      success: true,
-      rides
-    });
+    res.json({ success: true, rides });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =============================================
+// DRIVER-SPECIFIC ENDPOINTS
+// =============================================
+
+/**
+ * @desc    Get rides assigned to the logged-in driver
+ * @route   GET /api/rides/driver/rides
+ * @access  Private (Driver)
+ */
+const getDriverRides = async (req, res, next) => {
+  try {
+    const rides = await Ride.find({ driver: req.user._id }).populate('user').populate('driver');
+    res.json({ success: true, rides });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get active ride for the driver
+ * @route   GET /api/rides/driver/active
+ * @access  Private (Driver)
+ */
+const getDriverActiveRide = async (req, res, next) => {
+  try {
+    const ride = await Ride.findOne({
+      driver: req.user._id,
+      status: { $in: ['requested', 'accepted', 'pickup', 'inprogress'] }
+    }).populate('user').populate('driver');
+
+    res.json({ success: true, ride: ride || null });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Accept a ride request
+ * @route   PUT /api/rides/driver/accept/:rideId
+ * @access  Private (Driver)
+ */
+const acceptRide = async (req, res, next) => {
+  try {
+    const ride = await Ride.findById(req.params.rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    if (ride.driver.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'This ride is not assigned to you' });
+    }
+
+    if (ride.status !== 'requested') {
+      return res.status(400).json({ success: false, message: 'Ride cannot be accepted in its current state' });
+    }
+
+    ride.status = 'accepted';
+    await ride.save();
+
+    const populatedRide = await Ride.findById(ride._id).populate('user').populate('driver');
+
+    if (req.io) {
+      req.io.to(ride.user.toString()).emit('rideStatusUpdate', populatedRide);
+      req.io.to(ride.driver.toString()).emit('rideStatusUpdate', populatedRide);
+    }
+
+    res.json({ success: true, ride: populatedRide, message: 'Ride accepted' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Reject a ride request
+ * @route   PUT /api/rides/driver/reject/:rideId
+ * @access  Private (Driver)
+ */
+const rejectRide = async (req, res, next) => {
+  try {
+    const ride = await Ride.findById(req.params.rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    if (ride.driver.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'This ride is not assigned to you' });
+    }
+
+    if (ride.status !== 'requested') {
+      return res.status(400).json({ success: false, message: 'Ride cannot be rejected in its current state' });
+    }
+
+    ride.status = 'cancelled';
+    await ride.save();
+
+    const populatedRide = await Ride.findById(ride._id).populate('user').populate('driver');
+
+    if (req.io) {
+      req.io.to(ride.user.toString()).emit('rideStatusUpdate', populatedRide);
+    }
+
+    res.json({ success: true, ride: populatedRide, message: 'Ride rejected' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update ride status from driver side (pickup -> inprogress -> completed)
+ * @route   PUT /api/rides/driver/status
+ * @access  Private (Driver)
+ */
+const updateDriverRideStatus = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: errors.array()[0].msg });
+    }
+
+    const { rideId, status } = req.body;
+
+    const validTransitions = {
+      'accepted': ['pickup'],
+      'pickup': ['inprogress'],
+      'inprogress': ['completed']
+    };
+
+    const ride = await Ride.findById(rideId);
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    if (ride.driver.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'This ride is not assigned to you' });
+    }
+
+    const allowed = validTransitions[ride.status];
+    if (!allowed || !allowed.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot transition from '${ride.status}' to '${status}'`
+      });
+    }
+
+    ride.status = status;
+    if (status === 'completed') {
+      ride.completedAt = new Date();
+    }
+    await ride.save();
+
+    const populatedRide = await Ride.findById(ride._id).populate('user').populate('driver');
+
+    if (req.io) {
+      req.io.to(ride.user.toString()).emit('rideStatusUpdate', populatedRide);
+      req.io.to(ride.driver.toString()).emit('rideStatusUpdate', populatedRide);
+    }
+
+    res.json({ success: true, ride: populatedRide });
   } catch (error) {
     next(error);
   }
@@ -234,8 +499,18 @@ const getRideHistory = async (req, res, next) => {
 module.exports = {
   getFareEstimate,
   createRide,
+  createRideValidation,
   buyRefreshment,
+  buyRefreshmentValidation,
   getActiveRide,
   updateRideStatus,
-  getRideHistory
+  updateRideStatusValidation,
+  cancelRide,
+  getRideHistory,
+  getDriverRides,
+  getDriverActiveRide,
+  acceptRide,
+  rejectRide,
+  updateDriverRideStatus,
+  updateDriverRideStatusValidation
 };

@@ -3,49 +3,94 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const path = require('path');
+const fs = require('fs');
+const bcrypt = require('bcryptjs');
 const { connectDB } = require('./config/db');
 const { errorHandler } = require('./middleware/errorMiddleware');
 const User = require('./models/User');
 
-// Load env vars
+// Load environment variables
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: '*', // For demo compatibility
+    origin: process.env.NODE_ENV === 'production'
+      ? process.env.CLIENT_URL || true
+      : '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   }
 });
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// =============================================
+// SECURITY MIDDLEWARE
+// =============================================
 
-// Share socket io instance with routes
+// HTTP security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Disabled for CDN resources (Bootstrap, Leaflet)
+  crossOriginEmbedderPolicy: false
+}));
+
+// Rate limiting for API routes
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests, please try again later' }
+});
+
+// Stricter rate limit for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts, please try again later' }
+});
+
+// =============================================
+// CORE MIDDLEWARE
+// =============================================
+
+app.use(cors());
+app.use(express.json({ limit: '10kb' }));
+
+// Share Socket.io instance with route handlers
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
 
-// Import routes
+// =============================================
+// ROUTES
+// =============================================
+
 const authRoutes = require('./routes/authRoutes');
 const rideRoutes = require('./routes/rideRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+
+// Apply rate limiters
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 
 // Mount routes
 app.use('/api/auth', authRoutes);
-app.use('/api/rides', rideRoutes);
-app.use('/api/payments', paymentRoutes);
+app.use('/api/rides', apiLimiter, rideRoutes);
+app.use('/api/payments', apiLimiter, paymentRoutes);
+app.use('/api/admin', apiLimiter, adminRoutes);
 
-// Base route
-const path = require('path');
-const fs = require('fs');
+// =============================================
+// STATIC FILE SERVING (Production)
+// =============================================
+
 const distPath = path.join(__dirname, '../frontend/dist');
-
-console.log(`[Startup] Target frontend build path: ${distPath}`);
-console.log(`[Startup] Frontend build directory exists: ${fs.existsSync(distPath)}`);
 
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
@@ -54,27 +99,36 @@ if (fs.existsSync(distPath)) {
   });
 } else {
   app.get('/', (req, res) => {
-    res.send('Ucab API is running...');
+    res.json({
+      success: true,
+      message: 'Ucab API is running',
+      version: '2.0.0',
+      endpoints: {
+        auth: '/api/auth',
+        rides: '/api/rides',
+        payments: '/api/payments',
+        admin: '/api/admin'
+      }
+    });
   });
 }
 
-// Error handling
+// Error handling middleware (must be last)
 app.use(errorHandler);
 
-// Socket.io configuration
-io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
+// =============================================
+// SOCKET.IO CONFIGURATION
+// =============================================
 
-  // Join a room unique to the user/driver ID
+io.on('connection', (socket) => {
+  // Join personal room for user-specific notifications
   socket.on('join', (userId) => {
     socket.join(userId.toString());
-    console.log(`User joined personal room: ${userId}`);
   });
 
-  // Handle active ride room join
+  // Join ride-specific room for ride tracking
   socket.on('joinRideRoom', (rideId) => {
     socket.join(rideId.toString());
-    console.log(`Joined ride room: ${rideId}`);
   });
 
   // Handle real-time driver location updates
@@ -84,27 +138,27 @@ io.on('connection', (socket) => {
       if (driver && driver.role === 'driver') {
         driver.currentLocation = { lat, lng };
         await driver.save();
-        
-        // Broadcast location updates to the specific ride room
+
         if (rideId) {
           io.to(rideId.toString()).emit('driverLocationUpdate', { lat, lng });
         }
       }
     } catch (err) {
-      console.error('Socket location update error:', err.message);
+      // Silent fail for socket events — don't crash the server
     }
   });
 
   socket.on('disconnect', () => {
-    console.log(`Socket disconnected: ${socket.id}`);
+    // Socket cleanup handled automatically
   });
 });
 
-// Seed default Admin, Rider, and Driver
+// =============================================
+// DATABASE SEEDING
+// =============================================
+
 const seedData = async () => {
   try {
-    const bcrypt = require('bcryptjs');
-
     // Seed Admin
     const adminEmail = 'admin@ucab.com';
     const adminExists = await User.findOne({ email: adminEmail });
@@ -136,7 +190,7 @@ const seedData = async () => {
           { cardBrand: 'Mastercard', last4: '8888', cardholderName: 'John Rider' }
         ]
       });
-      console.log('✅ Default Rider seeded: rider@ucab.com / rider123 (with cards)');
+      console.log('✅ Default Rider seeded: rider@ucab.com / rider123');
     }
 
     // Seed Driver
@@ -155,10 +209,7 @@ const seedData = async () => {
         licenseNumber: 'DL-1234567890',
         isVerified: true,
         isOnline: true,
-        currentLocation: {
-          lat: 12.9716,
-          lng: 77.5946
-        }
+        currentLocation: { lat: 12.9716, lng: 77.5946 }
       });
       console.log('✅ Default Driver seeded: driver@ucab.com / driver123');
     }
@@ -167,19 +218,19 @@ const seedData = async () => {
   }
 };
 
+// =============================================
+// SERVER STARTUP
+// =============================================
+
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
-  // Connect to database (failsafe fallback inside)
   await connectDB();
-  
-  // Seed admin, rider, driver
   await seedData();
 
   server.listen(PORT, () => {
-    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    console.log(`🚀 Ucab server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
   });
 };
 
-// Trigger database re-seed
 startServer();

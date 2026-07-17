@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ucab-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm install --prefix frontend && npm run build --prefix frontend
+    startCommand: node backend/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRE
+        value: 7d

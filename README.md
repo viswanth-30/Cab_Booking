@@ -1,120 +1,224 @@
 # Ucab 🚖 Next-Gen MERN Stack Cab Booking System
 
-Ucab is a simple, reliable, and premium cab hailing application that makes travel stress-free. Built using the **MERN Stack** (MongoDB, Express.js, React, and Node.js), Ucab allows riders to book rides, track their drivers in real-time, settle fares automatically using saved cards, and even buy refreshments during the journey.
+Ucab is a premium, secure, and reliable cab booking application built on the **MERN Stack** (MongoDB, Express.js, React, Node.js). Designed for a seamless ride-hailing experience, Ucab features interactive mapping (Leaflet.js), real-time updates via Socket.io, role-based dashboards, secure payments, and a modern dark glassmorphism user interface.
 
-For example, when **Sarah** needed to reach the airport urgently, she used Ucab to book a nearby cab, tracked the driver's approach, and arrived exactly on time.
-
-
+---
 
 ## 🏗️ Project Architecture
 
 ```mermaid
 graph TD
-    subgraph Frontend (React.js + Vite)
-        A[Rider Dashboard] -->|Axios / Socket.io| B(Auth Context)
-        C[Leaflet Dark Map]
-        A -->|Select Destination| C
+    subgraph Frontend [React.js + Vite + Leaflet]
+        A[Dashboard Switcher] -->|Rider Role| B[Rider Dashboard]
+        A -->|Driver Role| C[Driver Dashboard]
+        A -->|Admin Role| D[Admin Dashboard]
     end
-    subgraph Backend (Express.js + Node)
-        D[Server.js] -->|Socket.io| E[Real-Time GPS Channel]
-        D -->|REST API| F[Controllers]
+    
+    subgraph Backend [Node.js + Express.js + Socket.io]
+        E[Server.js] -->|Middleware| F[Auth & Security Guard]
+        F -->|Controllers| G[User, Ride, Payment, Admin]
+        E -->|WebSockets| H[Real-Time Location Channel]
+      end
+
+    subgraph Database [Database Layer]
+        I[Mongoose db.js Proxy] -->|Atlas Mode| J[(MongoDB Atlas)]
+        I -->|Fallback Mode| K[(Local JSON mock_db.json)]
     end
-    subgraph Database Layer
-        G[db.js Proxy] -->|If Connected| H[(MongoDB Atlas)]
-        G -->|If Offline| I[(mock_db.json Engine)]
-    end
-    B -->|API Requests| D
+
+    B & C & D -->|HTTP API Requests| E
+    B & C -->|Socket Events| E
+    G -->|Data Access| I
 ```
 
 ---
 
-## ✨ Core Features
+## ✨ Features
 
-* **Quick Hailing**: Drop pins directly on the dark-themed interactive map (Leaflet.js) or select predefined spots to establish routes.
-* **Auto-Matching & GPS Tracking**: Booking a cab automatically assigns a nearby driver (`Dave Driver`). The app starts a live WebSocket (Socket.io) simulation showing the cab navigating roads in real-time.
-* **Promotions & Discounts**: Apply codes like **`WELCOME5`** (flat $5.00 off) or **`UCAB20`** (20% off base fare) to dynamically reduce costs.
-* **Charity Donations**: Opt-in to add a **$1, $2, or $5** donation to the *Green Earth Foundation* to make your travel eco-friendly.
-* **In-Ride Refreshment Bar**: Purchase snacks and drinks while the ride is `inprogress`. The live passenger fare updates on screen immediately:
-  - 💧 Cold Mineral Water ($1.00)
-  - 🥤 Organic Fizzy Soda ($1.50)
-  - 🍪 Crunchy Energy Snack ($2.00)
-* **Automatic Saved Cards Payments**: Save cards (Visa / Mastercard) under your profile. The final fare is charged automatically upon arrival.
-* **Seeded Credentials**: Demo accounts are pre-seeded in the database for instant testing.
-* **Failsafe Database Fallback**: A custom database Proxy layer automatically shifts Mongoose queries to a local JSON document database (`backend/mock_db.json`) if MongoDB is unavailable.
+### 👤 Rider Portal
+- **Interactive Routing**: Tap and drop pins on a customized Leaflet dark map to select pickup and dropoff points, or search addresses in India.
+- **Fare Estimate & Comparison**: View real-time estimated fare across multiple vehicle classes (Moto Bike, Standard Sedan, Premium SUV) with dynamic ETAs.
+- **Eco-Donations**: Add optional contributions (₹10, ₹20, ₹50) to the Green Earth Foundation.
+- **Promo System**: Save up to ₹50 or get 20% off by applying promotional discount codes (e.g. `WELCOME5`, `UCAB20`).
+- **In-Ride Refreshment Bar**: Purchase drinks (water, soda) or snacks directly from the dashboard while your ride is in progress. The fare updates instantly.
+- **Saved Cards Checkout**: Add and delete cards securely to experience automatic fare deduction upon ride completion.
 
----
+### 🚘 Driver Portal
+- **Online/Offline Switcher**: Control availability status at any time.
+- **Ride Request Queue**: Receive incoming requests in real-time, with detailed routes, fares, and options to accept or reject them.
+- **Active Trip Manager**: Step-by-step progress tracking: Accept → Reached Pickup → Start Trip → Complete Trip.
+- **GPS Simulation & Sharing**: Update and broadcast real-time location via Socket.io. If GPS is unavailable, use the clearly labelled **"Simulate Driver Movement"** button to mock progress for demo purposes.
+- **Verification Status**: Displays a verification alert if the admin has not yet approved the driver's license.
 
-## 🔑 Pre-seeded Test Accounts
+### 🛡️ Admin Dashboard
+- **Aggregate Analytics**: Instant statistics for total rides, completed bookings, cancellations, online drivers, registered users, and system earnings.
+- **User Directory**: Search and audit all riders and administrators in the system.
+- **Driver Verification Desk**: Review driver registrations, vehicles, licenses, and toggle verification approval statuses instantly.
+- **Rides Audit Ledger**: Comprehensive view of all requested, cancelled, and active rides.
+- **Payment Ledger**: Real-time auditing of completed transaction IDs, amounts, and settlement methods.
 
-Use these pre-saved logins to log in instantly (using the dashboard's quick-login buttons):
-
-| User Type | Email | Password | Pre-loaded Details |
-| :--- | :--- | :--- | :--- |
-| **Rider (User)** | `rider@ucab.com` | `rider123` | Pre-saved Visa 4242 & Mastercard 8888 cards. |
-| **Driver** | `driver@ucab.com` | `driver123` | Dave Driver (Sedan, KA-01-AB-1234). |
-| **Admin** | `admin@ucab.com` | `admin123` | Platform Administrator. |
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-Make sure you have [Node.js](https://nodejs.org/) installed.
-
-### Step 1: Run the Backend API
-1. Navigate to the `backend` folder:
-   ```bash
-   cd backend
-   ```
-2. Install packages:
-   ```bash
-   npm install
-   ```
-3. Start the Express server:
-   ```bash
-   npm run dev
-   ```
-   *(Running on port `5000`)*
-
-### Step 2: Run the Frontend App
-1. Navigate to the `frontend` folder:
-   ```bash
-   cd ../frontend
-   ```
-2. Install packages:
-   ```bash
-   npm install
-   ```
-3. Start the Vite React development server:
-   ```bash
-   npm run dev
-   ```
-   *(Running on port `5173`)*
+### 🔒 Security Implementations
+- **HTTP Security Headers**: Powered by `helmet` to protect the API from header exploits.
+- **API Rate Limiting**: Built-in request limiting per IP on core routes, with stricter rules on authorization routes (`/login`, `/register`).
+- **Data Sanitization**: Prevents injection attacks and enforces strict schema fields.
+- **Input Validation**: Uses `express-validator` to scrub and check payload formats before controller execution.
+- **Session Tokens**: Clean JWT authentication expiring in 7 days, with zero hardcoded secret fallbacks.
 
 ---
 
-## 📁 Repository Structure
+## 🛠️ Tech Stack
+
+- **Frontend**: React (Vite), Leaflet Map, CSS3 (Glassmorphism design system), Bootstrap 5, Socket.io-client, Axios.
+- **Backend**: Node.js, Express.js, Socket.io, Mongoose (MongoDB).
+- **Security**: Helmet, Express Rate Limit, Express Validator, Bcryptjs, Jsonwebtoken.
+
+---
+
+## 📂 Folder Structure
 
 ```text
 cabooking/
 ├── backend/
-│   ├── config/db.js          # Dual-mode database fallback compiler (with JS Proxy)
-│   ├── controllers/          # Business logic handlers (Auth, Rides, Payments)
-│   ├── middleware/           # Auth JWT validations and error managers
+│   ├── config/db.js          # Dual-mode database fallback compiler
+│   ├── controllers/          # Business logic handlers (Auth, Rides, Payments, Admin)
+│   ├── middleware/           # Auth JWT validations, role checkers, error managers
 │   ├── models/               # Schemas (User, Ride, Payment)
 │   ├── routes/               # Express endpoints router maps
 │   ├── mock_db.json          # File database fallback database (auto-seeded)
-│   ├── server.js             # Main server startup and socket connection managers
-│   └── .env                  # Configuration keys
+│   ├── server.js             # Main server startup & socket connection managers
+│   ├── .env.example          # Backend configuration keys template
+│   └── package.json          # Backend project dependencies
 ├── frontend/
+│   ├── public/               # Public assets
 │   ├── src/
 │   │   ├── components/       # Custom Navbar & Leaflet MapContainer
 │   │   ├── context/          # React AuthContext, Axios client & Sockets
-│   │   ├── pages/            # View dashboards (Home, Login, Register, UserDashboard)
-│   │   ├── App.jsx           # Private route switcher
+│   │   ├── pages/            # View dashboards (Home, Login, Register, Dashboards)
+│   │   ├── App.jsx           # App routes and dashboard router
 │   │   ├── index.css         # Styling system (glassmorphism & glowing highlights)
 │   │   └── main.jsx          # DOM mounting
-│   ├── index.html            # Core document loaders
-│   └── vite.config.js        # Bundler configs
-└── .gitignore                # Root git ignore configurations
+│   ├── index.html            # Main document loader
+│   ├── .env.example          # Frontend configuration keys template
+│   ├── vite.config.js        # Vite bundler configuration
+│   └── package.json          # Frontend project dependencies
+├── postman/
+│   └── Ucab_API_Collection.json # Importable Postman collection
+├── screenshots/              # Folder containing screenshots demonstrating UI flows
+├── DEPLOYMENT_GUIDE.md       # Step-by-step instructions for hosting
+├── API_DOCUMENTATION.md      # Detailed API endpoint references
+├── REVIEW_REPORT.md          # Internal SmartBridge scorecard evaluation
+├── CHANGELOG.md              # Versions history tracking
+├── render.yaml               # Infrastructure configuration for Render
+└── README.md                 # Primary system manual
 ```
+
+---
+
+## 🚀 Installation & Local Setup
+
+### 1. Backend Setup
+1. Open a terminal and navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Install the backend dependencies:
+   ```bash
+   npm install
+   ```
+3. Create your `.env` file from the template:
+   ```bash
+   copy .env.example .env
+   ```
+4. Configure your database URI and JWT secret inside `.env`.
+5. Start the backend server:
+   ```bash
+   npm run dev
+   ```
+   *The backend will run on `http://localhost:5000`*
+
+### 2. Frontend Setup
+1. Open another terminal and navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+2. Install the frontend dependencies:
+   ```bash
+   npm install
+   ```
+3. Create your `.env` file from the template:
+   ```bash
+   copy .env.example .env
+   ```
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+   *The frontend will run on `http://localhost:5173`*
+
+---
+
+## 🔑 Demo & Test Accounts
+
+You can log in instantly using the pre-seeded credentials available on the login screen:
+
+| Role | Email | Password | Pre-loaded Details |
+| :--- | :--- | :--- | :--- |
+| **Rider (User)** | `rider@ucab.com` | `rider123` | Pre-saved Visa 4242 & Mastercard 8888 cards |
+| **Driver** | `driver@ucab.com` | `driver123` | Verified status, sedan vehicle assigned |
+| **Admin** | `admin@ucab.com` | `admin123` | Platform Administrator access |
+
+---
+
+## 💻 Screenshots Section
+
+The screenshots showing the interactive Rider Panel, dynamic Driver Dashboard with simulation controls, and the statistical Admin Dashboard are located in the [screenshots](file:///c:/Users/LENOVO/OneDrive/Desktop/cabooking/screenshots) directory.
+
+---
+
+## 📡 Core API Endpoints
+
+A quick overview of key endpoints. See [API_DOCUMENTATION.md](file:///c:/Users/LENOVO/OneDrive/Desktop/cabooking/API_DOCUMENTATION.md) for full descriptions.
+
+- **Authentication**:
+  - `POST /api/auth/register` - Create account (User or Driver)
+  - `POST /api/auth/login` - Retrieve JWT session token
+  - `GET /api/auth/me` - Retrieve authenticated session profile
+- **Rider Rides**:
+  - `GET /api/rides/estimate` - Calculate distance, duration, and fare estimates
+  - `POST /api/rides/book` - Request a cab and assign a driver
+  - `POST /api/rides/buy-refreshment` - Purchase refreshments during a ride
+- **Driver Rides**:
+  - `GET /api/rides/driver/rides` - Get assigned requests
+  - `PUT /api/rides/driver/accept/:rideId` - Driver accepts booking request
+  - `PUT /api/rides/driver/status` - Advance trip stages (pickup, inprogress, completed)
+- **Admin**:
+  - `GET /api/admin/stats` - Fetch aggregate metrics
+  - `PUT /api/admin/drivers/:driverId/verify` - Toggle driver verified status
+
+---
+
+## ☁️ Deployment
+
+For deployment details, check [DEPLOYMENT_GUIDE.md](file:///c:/Users/LENOVO/OneDrive/Desktop/cabooking/DEPLOYMENT_GUIDE.md).
+- **Backend API & WebSockets**: Hosted on Render
+- **Frontend Assets**: Hosted on Render or Vercel
+
+---
+
+## ⚠️ Known Limitations
+
+- **Map Pins**: Nominatim address search results are limited to locations inside India by default (configured for `countrycodes=in` to align with the Bangalore demo).
+- **Payment Gateway**: Simulated payment capture only. No real banking operations are initiated.
+
+---
+
+## 🚀 Future Enhancements
+
+- **Real Payment Processing**: Integration with Razorpay or Stripe.
+- **Route Optimization**: Integrating the Leaflet Routing Machine for optimal street-by-street path matching instead of straight-line coordinates.
+- **Push Notifications**: Integrating web push capabilities for offline drivers and riders.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

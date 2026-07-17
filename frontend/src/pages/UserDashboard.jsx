@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import MapContainer from '../components/MapContainer';
 import axios from 'axios';
@@ -57,9 +57,7 @@ export default function UserDashboard() {
   const [paymentSuccess, setPaymentSuccess] = useState(null);
   const [paymentMode, setPaymentMode] = useState('card'); // 'card' | 'cash'
 
-  const API_URL = window.location.hostname === 'localhost'
-    ? 'http://localhost:5000/api'
-    : '/api';
+  const API_URL = import.meta.env.VITE_API_URL || '/api';
   const rideRoomJoined = useRef(null);
 
   useEffect(() => {
@@ -67,20 +65,20 @@ export default function UserDashboard() {
     fetchHistory();
     fetchSavedCards();
     generateNearbyCabs(null);
-  }, []);
+  }, [fetchActiveRide, fetchHistory, fetchSavedCards, generateNearbyCabs]);
 
   // Sync nearby cabs to follow pickup selection
   useEffect(() => {
     if (pickupLoc) {
       generateNearbyCabs(pickupLoc);
     }
-  }, [pickupLoc]);
+  }, [pickupLoc, generateNearbyCabs]);
 
   // Listen to live socket events for updates
   useEffect(() => {
     if (socket) {
       socket.on('rideStatusUpdate', (updatedRide) => {
-        console.log('Socket Ride Update:', updatedRide);
+
         setActiveRide(updatedRide);
         if (updatedRide.status === 'completed') {
           stopSimulation();
@@ -123,6 +121,10 @@ export default function UserDashboard() {
   useEffect(() => {
     if (activeRide) {
       if (activeRide.status === 'requested') {
+        // If the assigned driver is online, do NOT auto-accept (wait for driver to accept/reject)
+        if (activeRide.driver && activeRide.driver.isOnline) {
+          return;
+        }
         // Auto-assign and transition to 'accepted' after 2.5 seconds
         const timer = setTimeout(() => {
           updateRideStatusAPI('accepted');
@@ -131,18 +133,26 @@ export default function UserDashboard() {
       }
       
       if (activeRide.status === 'accepted' && !isSimulating) {
+        // If the driver is online, let the driver simulate movement to pickup
+        if (activeRide.driver && activeRide.driver.isOnline) {
+          return;
+        }
         // Trigger automated simulation of driver moving to pickup
         startDriverSimulation(true);
       }
 
       if (activeRide.status === 'inprogress' && !isSimulating) {
+        // If the driver is online, let the driver simulate movement to dropoff
+        if (activeRide.driver && activeRide.driver.isOnline) {
+          return;
+        }
         // Trigger automated simulation of ride moving to dropoff
         startDriverSimulation(false);
       }
     }
   }, [activeRide, isSimulating]);
 
-  const fetchActiveRide = async () => {
+  const fetchActiveRide = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/rides/active`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -158,11 +168,11 @@ export default function UserDashboard() {
         }
       }
     } catch (err) {
-      console.error(err);
+      // Session may be expired or invalid
     }
-  };
+  }, [token]);
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/rides/history`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -173,9 +183,9 @@ export default function UserDashboard() {
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [token]);
 
-  const fetchSavedCards = async () => {
+  const fetchSavedCards = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/auth/cards`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -189,10 +199,10 @@ export default function UserDashboard() {
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [token]);
 
   // Generate randomized nearby cabs for map decorations
-  const generateNearbyCabs = (center) => {
+  const generateNearbyCabs = useCallback((center) => {
     const centerLat = center ? center.lat : 12.9716;
     const centerLng = center ? center.lng : 77.5946;
     const cabs = Array.from({ length: 6 }, (_, i) => ({
@@ -206,7 +216,7 @@ export default function UserDashboard() {
       }
     }));
     setNearbyDrivers(cabs);
-  };
+  }, []);
 
   // Live Location Fetcher using Geolocation API
   const handleLocateUser = () => {
@@ -512,6 +522,23 @@ export default function UserDashboard() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Cancel active ride booking securely
+  const cancelActiveRide = async () => {
+    if (!activeRide) return;
+    try {
+      const res = await axios.put(`${API_URL}/rides/cancel/${activeRide._id}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.success) {
+        setActiveRide(null);
+        setDriverLoc(null);
+        alert(res.data.message || 'Ride cancelled successfully.');
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to cancel ride');
     }
   };
 
@@ -941,7 +968,7 @@ export default function UserDashboard() {
                   )}
 
                   <button 
-                    onClick={() => { updateRideStatusAPI('cancelled'); }}
+                    onClick={cancelActiveRide}
                     className="btn btn-outline-danger btn-sm rounded-pill py-2 mt-2"
                   >
                     Cancel Booking
