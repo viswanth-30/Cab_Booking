@@ -18,14 +18,6 @@ export default function AdminDashboard() {
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
-  useEffect(() => {
-    fetchStats();
-    fetchUsers();
-    fetchDrivers();
-    fetchRides();
-    fetchPayments();
-  }, [fetchStats, fetchUsers, fetchDrivers, fetchRides, fetchPayments]);
-
   const fetchStats = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/admin/stats`, { headers });
@@ -104,6 +96,18 @@ export default function AdminDashboard() {
     driver: 'bg-warning-subtle text-warning border-warning',
     admin: 'bg-danger-subtle text-danger border-danger'
   };
+
+  
+  // Moved useEffects to avoid TDZ (Temporal Dead Zone) Reference Errors
+  useEffect(() => {
+    fetchStats();
+    fetchUsers();
+    fetchDrivers();
+    fetchRides();
+    fetchPayments();
+  }, [fetchStats, fetchUsers, fetchDrivers, fetchRides, fetchPayments]);
+
+  
 
   return (
     <div className="container py-4">

@@ -17,34 +17,6 @@ export default function DriverDashboard() {
   const [simEta, setSimEta] = useState(0);
   const simulationInterval = useRef(null);
 
-  useEffect(() => {
-    fetchDriverRides();
-    fetchDriverActiveRide();
-  }, [fetchDriverRides, fetchDriverActiveRide]);
-
-  // Socket listeners for real-time ride updates
-  useEffect(() => {
-    if (socket) {
-      socket.on('newRideRequest', (ride) => {
-        fetchDriverRides();
-        fetchDriverActiveRide();
-      });
-
-      socket.on('rideStatusUpdate', (ride) => {
-        setActiveRide(prev => {
-          if (prev && prev._id === ride._id) return ride;
-          return prev;
-        });
-        fetchDriverRides();
-      });
-
-      return () => {
-        socket.off('newRideRequest');
-        socket.off('rideStatusUpdate');
-      };
-    }
-  }, [socket, fetchDriverRides, fetchDriverActiveRide]);
-
   const fetchDriverRides = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/rides/driver/rides`, {
@@ -217,7 +189,39 @@ export default function DriverDashboard() {
 
     switch (activeRide.status) {
       case 'accepted':
-        return (
+        
+  // Moved useEffects to avoid TDZ (Temporal Dead Zone) Reference Errors
+  useEffect(() => {
+    fetchDriverRides();
+    fetchDriverActiveRide();
+  }, [fetchDriverRides, fetchDriverActiveRide]);
+
+  // Socket listeners for real-time ride updates
+  useEffect(() => {
+    if (socket) {
+      socket.on('newRideRequest', (ride) => {
+        fetchDriverRides();
+        fetchDriverActiveRide();
+      });
+
+      socket.on('rideStatusUpdate', (ride) => {
+        setActiveRide(prev => {
+          if (prev && prev._id === ride._id) return ride;
+          return prev;
+        });
+        fetchDriverRides();
+      });
+
+      return () => {
+        socket.off('newRideRequest');
+        socket.off('rideStatusUpdate');
+      };
+    }
+  }, [socket, fetchDriverRides, fetchDriverActiveRide]);
+
+  
+
+  return (
           <div className="d-flex flex-column gap-2">
             <button onClick={() => handleUpdateStatus('pickup')} className="btn glow-btn rounded-pill py-2">
               📍 Reached Pickup Location

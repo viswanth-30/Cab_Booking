@@ -60,98 +60,6 @@ export default function UserDashboard() {
   const API_URL = import.meta.env.VITE_API_URL || '/api';
   const rideRoomJoined = useRef(null);
 
-  useEffect(() => {
-    fetchActiveRide();
-    fetchHistory();
-    fetchSavedCards();
-    generateNearbyCabs(null);
-  }, [fetchActiveRide, fetchHistory, fetchSavedCards, generateNearbyCabs]);
-
-  // Sync nearby cabs to follow pickup selection
-  useEffect(() => {
-    if (pickupLoc) {
-      generateNearbyCabs(pickupLoc);
-    }
-  }, [pickupLoc, generateNearbyCabs]);
-
-  // Listen to live socket events for updates
-  useEffect(() => {
-    if (socket) {
-      socket.on('rideStatusUpdate', (updatedRide) => {
-
-        setActiveRide(updatedRide);
-        if (updatedRide.status === 'completed') {
-          stopSimulation();
-          fetchHistory();
-        }
-      });
-
-      socket.on('driverLocationUpdate', (loc) => {
-        setDriverLoc(loc);
-      });
-
-      socket.on('paymentStatusUpdate', (payment) => {
-        if (payment.ride?._id === activeRide?._id) {
-          setPaymentSuccess(payment);
-          setActiveRide(null);
-          setDriverLoc(null);
-          fetchHistory();
-        }
-      });
-    }
-
-    return () => {
-      if (socket) {
-        socket.off('rideStatusUpdate');
-        socket.off('driverLocationUpdate');
-        socket.off('paymentStatusUpdate');
-      }
-    };
-  }, [socket, activeRide]);
-
-  // Join ride rooms when matched
-  useEffect(() => {
-    if (socket && activeRide && rideRoomJoined.current !== activeRide._id) {
-      socket.emit('joinRideRoom', activeRide._id);
-      rideRoomJoined.current = activeRide._id;
-    }
-  }, [socket, activeRide]);
-
-  // Handle auto-matching and simulation transitions
-  useEffect(() => {
-    if (activeRide) {
-      if (activeRide.status === 'requested') {
-        // If the assigned driver is online, do NOT auto-accept (wait for driver to accept/reject)
-        if (activeRide.driver && activeRide.driver.isOnline) {
-          return;
-        }
-        // Auto-assign and transition to 'accepted' after 2.5 seconds
-        const timer = setTimeout(() => {
-          updateRideStatusAPI('accepted');
-        }, 2500);
-        return () => clearTimeout(timer);
-      }
-      
-      if (activeRide.status === 'accepted' && !isSimulating) {
-        // If the driver is online, let the driver simulate movement to pickup
-        if (activeRide.driver && activeRide.driver.isOnline) {
-          return;
-        }
-        // Trigger automated simulation of driver moving to pickup
-        startDriverSimulation(true);
-      }
-
-      if (activeRide.status === 'inprogress' && !isSimulating) {
-        // If the driver is online, let the driver simulate movement to dropoff
-        if (activeRide.driver && activeRide.driver.isOnline) {
-          return;
-        }
-        // Trigger automated simulation of ride moving to dropoff
-        startDriverSimulation(false);
-      }
-    }
-  }, [activeRide, isSimulating]);
-
   const fetchActiveRide = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/rides/active`, {
@@ -663,6 +571,102 @@ export default function UserDashboard() {
   // Live total calculation for estimated box
   const liveEstBase = estimates ? estimates.estimates[selectedVehicle].fare : 0;
   const liveEstTotal = Math.max(10, liveEstBase - discountAmount + donationAmount);
+
+  
+  // Moved useEffects to avoid TDZ (Temporal Dead Zone) Reference Errors
+  useEffect(() => {
+    fetchActiveRide();
+    fetchHistory();
+    fetchSavedCards();
+    generateNearbyCabs(null);
+  }, [fetchActiveRide, fetchHistory, fetchSavedCards, generateNearbyCabs]);
+
+  // Sync nearby cabs to follow pickup selection
+  useEffect(() => {
+    if (pickupLoc) {
+      generateNearbyCabs(pickupLoc);
+    }
+  }, [pickupLoc, generateNearbyCabs]);
+
+  // Listen to live socket events for updates
+  useEffect(() => {
+    if (socket) {
+      socket.on('rideStatusUpdate', (updatedRide) => {
+
+        setActiveRide(updatedRide);
+        if (updatedRide.status === 'completed') {
+          stopSimulation();
+          fetchHistory();
+        }
+      });
+
+      socket.on('driverLocationUpdate', (loc) => {
+        setDriverLoc(loc);
+      });
+
+      socket.on('paymentStatusUpdate', (payment) => {
+        if (payment.ride?._id === activeRide?._id) {
+          setPaymentSuccess(payment);
+          setActiveRide(null);
+          setDriverLoc(null);
+          fetchHistory();
+        }
+      });
+    }
+
+    return () => {
+      if (socket) {
+        socket.off('rideStatusUpdate');
+        socket.off('driverLocationUpdate');
+        socket.off('paymentStatusUpdate');
+      }
+    };
+  }, [socket, activeRide]);
+
+  // Join ride rooms when matched
+  useEffect(() => {
+    if (socket && activeRide && rideRoomJoined.current !== activeRide._id) {
+      socket.emit('joinRideRoom', activeRide._id);
+      rideRoomJoined.current = activeRide._id;
+    }
+  }, [socket, activeRide]);
+
+  // Handle auto-matching and simulation transitions
+  useEffect(() => {
+    if (activeRide) {
+      if (activeRide.status === 'requested') {
+        // If the assigned driver is online, do NOT auto-accept (wait for driver to accept/reject)
+        if (activeRide.driver && activeRide.driver.isOnline) {
+          return;
+        }
+        // Auto-assign and transition to 'accepted' after 2.5 seconds
+        const timer = setTimeout(() => {
+          updateRideStatusAPI('accepted');
+        }, 2500);
+        return () => clearTimeout(timer);
+      }
+      
+      if (activeRide.status === 'accepted' && !isSimulating) {
+        // If the driver is online, let the driver simulate movement to pickup
+        if (activeRide.driver && activeRide.driver.isOnline) {
+          return;
+        }
+        // Trigger automated simulation of driver moving to pickup
+        startDriverSimulation(true);
+      }
+
+      if (activeRide.status === 'inprogress' && !isSimulating) {
+        // If the driver is online, let the driver simulate movement to dropoff
+        if (activeRide.driver && activeRide.driver.isOnline) {
+          return;
+        }
+        // Trigger automated simulation of ride moving to dropoff
+        startDriverSimulation(false);
+      }
+    }
+  }, [activeRide, isSimulating]);
+
+  
 
   return (
     <div className="container py-4">
