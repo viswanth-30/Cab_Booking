@@ -25,6 +25,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const fetchMe = async () => {
       if (token) {
+        setLoading(true);
         try {
           const res = await axios.get(`${API_URL}/auth/me`, {
             headers: { Authorization: `Bearer ${token}` }
