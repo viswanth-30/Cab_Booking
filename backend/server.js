@@ -16,6 +16,10 @@ const User = require('./models/User');
 dotenv.config();
 
 const app = express();
+
+// Trust proxy for rate limiting (Render uses load balancers / reverse proxies)
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
