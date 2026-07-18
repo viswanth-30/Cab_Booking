@@ -135,14 +135,34 @@ const createRide = async (req, res, next) => {
     }
 
     // Find nearest available verified online driver matching vehicleType
-    let matchedDriver = await User.findOne({
+    const onlineDrivers = await User.find({
       role: 'driver',
       isVerified: true,
       isOnline: true,
-      vehicleType: vehicleType
+      vehicleType: vehicleType,
+      'currentLocation.lat': { $exists: true },
+      'currentLocation.lng': { $exists: true }
     });
 
-    // Fallback: find any verified driver of the requested vehicleType
+    let matchedDriver = null;
+
+    if (onlineDrivers.length > 0) {
+      // Sort by distance from pickup and pick the closest
+      let minDist = Infinity;
+      for (const driver of onlineDrivers) {
+        const dist = getDistance(
+          pickupLocation.lat, pickupLocation.lng,
+          driver.currentLocation.lat, driver.currentLocation.lng
+        );
+        if (dist < minDist) {
+          minDist = dist;
+          matchedDriver = driver;
+        }
+      }
+      console.log(`[ride] nearest driver: ${matchedDriver.name} (${minDist.toFixed(2)} km from pickup)`);
+    }
+
+    // Fallback: find any verified driver of the requested vehicleType (even offline / no location)
     if (!matchedDriver) {
       matchedDriver = await User.findOne({
         role: 'driver',

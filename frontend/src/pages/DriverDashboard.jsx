@@ -183,14 +183,7 @@ export default function DriverDashboard() {
     }, 1500);
   };
 
-  // Status progression labels
-  const getStatusActions = () => {
-    if (!activeRide) return null;
-
-    switch (activeRide.status) {
-      case 'accepted':
-        
-  // Moved useEffects to avoid TDZ (Temporal Dead Zone) Reference Errors
+  // Fetch rides on mount
   useEffect(() => {
     fetchDriverRides();
     fetchDriverActiveRide();
@@ -228,9 +221,13 @@ export default function DriverDashboard() {
     return () => clearInterval(interval);
   }, [fetchDriverRides, fetchDriverActiveRide]);
 
-  
+  // Status progression labels
+  const getStatusActions = () => {
+    if (!activeRide) return null;
 
-  return (
+    switch (activeRide.status) {
+      case 'accepted':
+        return (
           <div className="d-flex flex-column gap-2">
             <button onClick={() => handleUpdateStatus('pickup')} className="btn glow-btn rounded-pill py-2">
               📍 Reached Pickup Location
