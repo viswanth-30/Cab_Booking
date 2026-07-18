@@ -10,7 +10,7 @@ Ucab is a premium, secure, and reliable cab booking application built on the **M
 
 > Note: hosted on Render's free tier — the server may take 30-60 seconds to wake up on first load.
 
-🎥 **[Watch the demo video](PASTE_VIDEO_LINK_HERE)** — full walkthrough of rider booking, driver accept/complete flow, and admin verification.
+🎥 **[Watch the demo video](https://drive.google.com/file/d/1k4UOwNfHZecXWC_-38zFuGwRItaNrjV2/view?usp=drive_link)** — full walkthrough of rider booking, driver accept/complete flow, and admin verification.
 
 ---
 
