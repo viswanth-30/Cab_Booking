@@ -179,6 +179,7 @@ const createRide = async (req, res, next) => {
     if (req.io) {
       req.io.to(req.user._id.toString()).emit('rideStatusUpdate', populatedRide);
       req.io.to(matchedDriver._id.toString()).emit('newRideRequest', populatedRide);
+      console.log(`[ride] emitted newRideRequest to driver room ${matchedDriver._id}`);
     }
 
     res.status(201).json({

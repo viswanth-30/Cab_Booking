@@ -44,10 +44,16 @@ export const AuthProvider = ({ children }) => {
   // Socket connection management
   useEffect(() => {
     if (user) {
+      console.log('[socket] SOCKET_URL resolved to:', SOCKET_URL);
       const socketConn = io(SOCKET_URL);
 
       socketConn.on('connect', () => {
+        console.log('[socket] connected:', socketConn.id, 'to', SOCKET_URL);
         socketConn.emit('join', user._id);
+      });
+
+      socketConn.on('connect_error', (err) => {
+        console.error('[socket] connection failed:', err.message, 'target:', SOCKET_URL);
       });
 
       setSocket(socketConn);

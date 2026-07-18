@@ -219,6 +219,15 @@ export default function DriverDashboard() {
     }
   }, [socket, fetchDriverRides, fetchDriverActiveRide]);
 
+  // Polling fallback — ensures rides appear even if sockets drop
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchDriverRides();
+      fetchDriverActiveRide();
+    }, 8000); // poll every 8 seconds as a safety net
+    return () => clearInterval(interval);
+  }, [fetchDriverRides, fetchDriverActiveRide]);
+
   
 
   return (

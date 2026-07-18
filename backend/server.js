@@ -127,6 +127,7 @@ app.use(errorHandler);
 io.on('connection', (socket) => {
   // Join personal room for user-specific notifications
   socket.on('join', (userId) => {
+    console.log(`[socket] user ${userId} joined room ${userId}`);
     socket.join(userId.toString());
   });
 
