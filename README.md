@@ -4,6 +4,16 @@ Ucab is a premium, secure, and reliable cab booking application built on the **M
 
 ---
 
+## 🔗 Live Demo
+
+🚖 **[cab-booking-cwbt.onrender.com](https://cab-booking-cwbt.onrender.com/)**
+
+> Note: hosted on Render's free tier — the server may take 30-60 seconds to wake up on first load.
+
+🎥 **[Watch the demo video](PASTE_VIDEO_LINK_HERE)** — full walkthrough of rider booking, driver accept/complete flow, and admin verification.
+
+---
+
 ## 🏗️ Project Architecture
 
 ```mermaid
@@ -76,9 +86,9 @@ graph TD
 ## 📂 Folder Structure
 
 ```text
-cabooking/
+Cab_Booking/
 ├── backend/
-│   ├── config/db.js          # Dual-mode database fallback compiler
+│   ├── config/db.js          # Dual-mode database fallback adapter
 │   ├── controllers/          # Business logic handlers (Auth, Rides, Payments, Admin)
 │   ├── middleware/           # Auth JWT validations, role checkers, error managers
 │   ├── models/               # Schemas (User, Ride, Payment)
@@ -105,7 +115,7 @@ cabooking/
 ├── screenshots/              # Folder containing screenshots demonstrating UI flows
 ├── DEPLOYMENT_GUIDE.md       # Step-by-step instructions for hosting
 ├── API_DOCUMENTATION.md      # Detailed API endpoint references
-├── REVIEW_REPORT.md          # Internal SmartBridge scorecard evaluation
+├── REVIEW_REPORT.md          # Self-review scorecard (author's own evaluation, not an official SmartBridge document)
 ├── CHANGELOG.md              # Versions history tracking
 ├── render.yaml               # Infrastructure configuration for Render
 └── README.md                 # Primary system manual
@@ -168,9 +178,16 @@ You can log in instantly using the pre-seeded credentials available on the login
 
 ---
 
-## 💻 Screenshots Section
+## 💻 Screenshots
 
-The screenshots showing the interactive Rider Panel, dynamic Driver Dashboard with simulation controls, and the statistical Admin Dashboard are located in the [screenshots](file:///c:/Users/LENOVO/OneDrive/Desktop/cabooking/screenshots) directory.
+### Admin Dashboard
+![Admin Dashboard](screenshots/Admin-dashboard.png)
+
+### Driver Dashboard
+![Driver Dashboard](screenshots/Driver-Dashboard.png)
+
+### Rider Dashboard
+![Rider Dashboard](screenshots/Rider-dashboard.png)
 
 ---
 
@@ -199,65 +216,17 @@ A quick overview of key endpoints. See [API_DOCUMENTATION.md](file:///c:/Users/L
 ## ☁️ Deployment
 
 For deployment details, check [DEPLOYMENT_GUIDE.md](file:///c:/Users/LENOVO/OneDrive/Desktop/cabooking/DEPLOYMENT_GUIDE.md).
-- **Backend API & WebSockets**: Hosted on Render
-- **Frontend Assets**: Hosted on Render or Vercel
+- **Frontend & Backend**: Both hosted together on Render as a single web service
 
 ---
 
-## 🔧 Recent Changes (July 2026)
+## 🔧 Recent Improvements (July 2026)
 
-### 🐛 Critical Bug Fix — Driver Dashboard Not Receiving Ride Requests
-
-**Symptom**: Rider books a ride successfully, but the request never appears on the Driver Dashboard — no error shown anywhere.
-
-**Root Causes Identified & Fixed**:
-
-#### 1. React Hooks Misplacement (`frontend/src/pages/DriverDashboard.jsx`)
-All three `useEffect` hooks (initial data fetch, Socket.io listeners, polling fallback) were accidentally nested inside the `getStatusActions()` helper function's `switch/case 'accepted':` block. This violates React's Rules of Hooks — the hooks only ran when `getStatusActions()` was called during render AND the active ride status was `'accepted'`. On first load with no active ride, **none of these hooks ever executed**, so the driver dashboard never fetched pending rides and never listened for socket events.
-
-**Fix**: Moved all `useEffect` hooks to the component's top level, before `getStatusActions()` is defined.
-
-#### 2. No Proximity-Based Driver Matching (`backend/controllers/rideController.js`)
-The `createRide` function used `User.findOne(...)` which returns whichever driver MongoDB picks first — not the nearest one. A driver right next to the rider could be skipped in favor of a distant one.
-
-**Fix**: Now fetches all eligible online drivers via `User.find(...)`, computes haversine distance from the pickup location for each, and assigns the **closest** driver. Falls back to any verified driver if no online drivers have a location set.
-
-#### 3. Socket Connection Diagnostics (`frontend/src/context/AuthContext.jsx`)
-No visibility into whether the Socket.io connection was actually established. If `VITE_SOCKET_URL` pointed at the wrong address, the socket silently failed.
-
-**Fix**: Added diagnostic `console.log` / `console.error` for:
-- The resolved `SOCKET_URL` value
-- Successful connection (with socket ID)
-- Connection failures (with error message and target URL)
-
-#### 4. Backend Socket Event Logging (`backend/server.js` & `backend/controllers/rideController.js`)
-No server-side confirmation that socket room joins and ride event emissions were actually firing.
-
-**Fix**: Added `console.log` statements for:
-- `[socket] user <id> joined room <id>` — when a user joins their personal socket room
-- `[ride] emitted newRideRequest to driver room <id>` — when a ride request is emitted to the matched driver
-- `[ride] nearest driver: <name> (<distance> km from pickup)` — when proximity matching selects a driver
-
-#### 5. Polling Fallback (`frontend/src/pages/DriverDashboard.jsx`)
-Real-time socket push was the **only** way the driver found out about new rides. If the socket dropped or failed to connect, ride requests were invisible until a manual page refresh.
-
-**Fix**: Added a `setInterval`-based polling fallback that calls `fetchDriverRides()` and `fetchDriverActiveRide()` every 8 seconds, guaranteeing ride requests appear within ~8s even if the socket connection is down.
-
-#### 6. Frontend Environment Variables (`frontend/.env`)
-Verified that both required variables are present:
-```env
-VITE_API_URL=http://localhost:5000/api
-VITE_SOCKET_URL=http://localhost:5000
-```
-If `VITE_SOCKET_URL` is missing, the socket falls back to `window.location.origin` (the Vite dev server on port 5173), which is **not** the backend — causing silent connection failure.
-
-### Files Modified
-| File | Change Summary |
-| :--- | :--- |
-| `frontend/src/pages/DriverDashboard.jsx` | Moved `useEffect` hooks to component top level; added 8s polling fallback |
-| `frontend/src/context/AuthContext.jsx` | Added socket connection diagnostic logging |
-| `backend/controllers/rideController.js` | Proximity-based nearest driver matching using haversine distance; emit logging |
-| `backend/server.js` | Added socket room join logging |
+Improved driver-matching to select the nearest available online driver (haversine
+distance), added connection reliability safeguards (polling fallback + diagnostic
+logging) so ride requests reliably reach the driver dashboard in real time, and
+fixed a React hooks ordering bug that prevented the driver dashboard from loading
+data on first render. Full technical write-up in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
